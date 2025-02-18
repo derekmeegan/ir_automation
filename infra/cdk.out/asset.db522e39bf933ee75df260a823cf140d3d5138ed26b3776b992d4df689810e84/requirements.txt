@@ -1,0 +1,7 @@
+aws-cdk-lib==2.178.2
+requests
+PyPDF2
+playwright
+groq
+aws-lambda-powertools
+boto3==1.36.22
