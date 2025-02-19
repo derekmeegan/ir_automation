@@ -70,34 +70,25 @@ class MyServerlessStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
 
-        json_bucket = s3.Bucket(
-            self,
-            "JSONBucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-            block_public_access=s3.BlockPublicAccess(
-                block_public_acls=False,
-                block_public_policy=False,
-                ignore_public_acls=False,
-                restrict_public_buckets=False
-            ),
-            public_read_access=True
-        )
-
-        json_bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                actions=["s3:GetObject"],
-                resources=[f"{json_bucket.bucket_arn}/*"],
-                principals=[iam.AnyPrincipal()]
-            )
-        )
-
         # 2) Docker image for the WORKER function
         #    This pushes an image to ECR at deploy time.
         worker_image_asset = ecr_assets.DockerImageAsset(
             self,
             "WorkerImageAsset",
             directory="../serverless/worker",  # Path to your Dockerfile and code
+        )
+
+        disabler_function = PythonFunction(
+            self,
+            "DisablerFunction",
+            entry="serverless/disabler",
+            index="disabler.py",
+            handler="lambda_handler",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+        )
+
+        disabler_function_url = disabler_function.add_function_url(
+            auth_type=lambda_.FunctionUrlAuthType.NONE
         )
 
         # 3) Manager function (standard Python ZIP)
@@ -115,10 +106,10 @@ class MyServerlessStack(Stack):
                 "WORKER_EXECUTION_ROLE": worker_lambda_execution_role.role_arn,
                 "HISTORICAL_TABLE": historical_table.table_name,
                 "CONFIG_TABLE": config_table.table_name,
-                "JSON_BUCKET": json_bucket.bucket_name,
                 "AWS_ACCOUNT_ID": self.account,
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
-                "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn
+                "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn,
+                "DISABLER_URL": disabler_function_url.url,
             },
         )
 
@@ -126,7 +117,6 @@ class MyServerlessStack(Stack):
         scheduling_table.grant_read_data(manager_function)
         historical_table.grant_read_data(manager_function)
         config_table.grant_read_data(manager_function)
-        json_bucket.grant_write(manager_function)
 
         # Grant manager function permission to create/update worker Lambdas
         manager_function.role.add_to_principal_policy(

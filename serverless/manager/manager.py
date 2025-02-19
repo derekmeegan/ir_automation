@@ -7,11 +7,9 @@ from typing import Any, Dict
 DYNAMO_TABLE = os.environ["TABLE_NAME"]
 WORKER_IMAGE_URI = os.environ["WORKER_IMAGE_URI"]
 WORKER_EXECUTION_ROLE = os.environ["WORKER_EXECUTION_ROLE"]
-
-# Additional environment variables (set via CDK)
 HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
-JSON_BUCKET = os.environ["JSON_BUCKET"]
+DISABLER_URL = os.environ["DISABLER_URL"]
 
 dynamo = boto3.resource("dynamodb")
 lambda_client = boto3.client("lambda")
@@ -32,7 +30,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     table = dynamo.Table(DYNAMO_TABLE)
 
     response = table.query(
-        IndexName="date-index",  # adjust index as needed
+        IndexName="date-index",
         KeyConditionExpression="#dt = :today",
         ExpressionAttributeNames={"#dt": "date"},
         ExpressionAttributeValues={":today": today_str}
@@ -50,53 +48,38 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         year = item.get("year")
 
         # 1) Generate JSON from historical data and retrieve site config.
-        json_uri = generate_json_for_ticker(ticker, today_str)
+        json_data = generate_json_for_ticker(ticker, today_str)
         site_config = get_site_config(ticker)
+
+        rule_name = f"PingRule-{ticker}-{today_str}"
+        event_id = _create_or_update_ping_rule(rule_name, function_name, release_time)
 
         # Compose environment variables for the worker.
         variables = {
             "QUARTER": quarter,
             "YEAR": year,
-            "JSON_URI": json_uri,
+            "JSON_DATA": json_data,
             "SITE_CONFIG": site_config,
+            "PING_RULE_NAME":rule_name,
+            "PING_RULE_ID": event_id,
+            "DISABLER_URL": DISABLER_URL,
         }
 
         # 2) Create or update the worker Lambda for this ticker.
         function_name = f"WorkerFunction-{ticker}"
         create_or_update_worker_function(function_name, variables)
 
-        # 3) Create or update the EventBridge rule to ping the worker.
-        rule_name = f"PingRule-{ticker}-{today_str}"
-        _create_or_update_ping_rule(rule_name, function_name, release_time)
-
         created_or_updated.append({"ticker": ticker, "function": function_name, "rule": rule_name})
 
     return {"created_or_updated": created_or_updated}
 
 def generate_json_for_ticker(ticker: str, today_str: str) -> str:
-    """
-    Query the historical table for a given ticker, generate a JSON file in memory,
-    and upload it to the bucket. Returns the S3 URI.
-    """
     historical_table = dynamo.Table(HISTORICAL_TABLE)
-    response = historical_table.query(
-        KeyConditionExpression="ticker = :ticker",
-        ExpressionAttributeValues={":ticker": ticker},
-        ExpressionAttributeValues={":today": today_str}
-    )
-    items = response.get("Items", [])
-    if not items:
+    response = historical_table.get_item(Key={"ticker": ticker})
+    item = response.get("Item", {})
+    if not item:
         raise ValueError(f"No historical data found for ticker {ticker}")
-
-    json_data = json.dumps(items, indent=2)
-
-    # Upload to S3
-    s3_client = boto3.client("s3")
-    json_key = f"{ticker}/{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.json"
-    s3_client.put_object(Bucket=JSON_BUCKET, Key=json_key, Body=json_data, ContentType="application/json")
-
-    # Return the S3 URI
-    return f"s3://{JSON_BUCKET}/{json_key}"
+    return json.dumps(item, indent=2)
 
 def get_site_config(ticker: str) -> str:
     """
@@ -145,9 +128,9 @@ def _create_or_update_ping_rule(rule_name: str, function_name: str, release_time
     at intervals between ~5:55–9:30 AM ET or 3:55–6:30 PM ET.
     """
     if release_time == "before":
-        cron_expr = "cron(* 10-13 ? * * *)"  # morning window (approx.)
+        cron_expr = "cron(0/15 10-13 ? * * *)"  # morning window (approx.)
     else:
-        cron_expr = "cron(* 20-23 ? * * *)"  # afternoon window (approx.)
+        cron_expr = "cron(0/15 20-23 ? * * *)"  # afternoon window (approx.)
 
     events_client.put_rule(
         Name=rule_name,
@@ -157,20 +140,22 @@ def _create_or_update_ping_rule(rule_name: str, function_name: str, release_time
     )
 
     lambda_arn = f"arn:aws:lambda:{os.environ['AWS_REGION']}:{os.environ['AWS_ACCOUNT_ID']}:function:{function_name}"
+    event_id = f"{function_name}Target"
     events_client.put_targets(
         Rule=rule_name,
         Targets=[
             {
-                "Id": f"{function_name}Target",
+                "Id": event_id,
                 "Arn": lambda_arn,
                 "RoleArn": _get_event_invoke_role(),
             }
         ]
     )
+    return event_id
 
 def _get_event_invoke_role() -> str:
     """
     Return an IAM role ARN that allows EventBridge to invoke the worker Lambda.
     """
-    return "arn:aws:iam::699328772264:role/EventBridgeInvokeLambdaRole"
+    return f"arn:aws:iam::{os.environ['AWS_ACCOUNT_ID']}:role/EventBridgeInvokeLambdaRole"
     

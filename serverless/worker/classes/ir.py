@@ -43,8 +43,9 @@ class IRWorkflow:
         self.quarter = config.get('quarter')
         self.year = config.get('year')
         self.ticker = config.get('ticker')
-        self.json_uri = config.get('json_uri')
+        self.json_data = config.get('json_data')
         self.llm_instructions = config.get('llm_instructions')
+        self.url_ignore_list = config.get('url_ignore_list', [])
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -184,7 +185,7 @@ class IRWorkflow:
                         
                         for el, _ in candidate_elements:
                             href = await el.get_attribute("href")
-                            if not href:
+                            if not href or href in self.url_ignore_list:
                                 continue
                             if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
                                 continue
@@ -290,6 +291,7 @@ class IRWorkflow:
                 "username": "EarningsEar"
             }
         )
+        print('message sent to discord')
 
     async def process_earnings(self) -> Dict[str, Any]:
         """
@@ -301,34 +303,18 @@ class IRWorkflow:
         if self.extraction_method == "pdf":
             content = self.extract_pdf_text(link)
         else:
+            print('Extracting content from webpage')
             content = await self.extract_html_text(link)
         # Call LLM function asynchronously. Here we assume a separate async function for groq.
         metrics = await self.extract_financial_metrics(content)
         discord_message = self.analyze_financial_metrics(metrics)
+        print(discord_message)
+        print('punting discord message')
         self.punt_message_to_discord(discord_message)
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
-        # Extract historical and reported metrics
-        # hist = {
-        #     "ticker": "ANSET",
-        #     "date": "2025-02-18",
-        #     "current_fiscal_year_eps_mean": 2.19,
-        #     "current_fiscal_year_sales_mean_millions": 6969.55,
-        #     "current_quarter_eps_mean": 0.57,
-        #     "current_quarter_sales_estimate_millions": 1899.67,
-        #     "next_quarter_eps_mean": 0.56,
-        #     "next_quarter_sales_estimate_millions": 1898.7
-        # }
-        hist = {
-            "ticker": "TOST",
-            "date": "2025-02-18",
-            "current_fiscal_year_eps_mean": 0.6,
-            "current_fiscal_year_sales_mean_millions": 4938.35,
-            "current_quarter_eps_mean": 0.17,
-            "current_quarter_sales_estimate_millions": 1313.37,
-            "next_quarter_eps_mean": 0.17,
-            "next_quarter_sales_estimate_millions": 1353.81
-        }
+        hist = json.loads(self.json_data)
+        print(hist)
         reported = extracted_data['metrics']
 
         # Determine emojis for comparison

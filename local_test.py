@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # Set up environment variables for local testing.
     os.environ["QUARTER"] = '4'
     os.environ["YEAR"] = '2024'
-    os.environ["JSON_URI"] = "s3://bucket/path/to/json"
+    os.environ["JSON_DATA"] = '{\n    "ticker": "TOST",\n    "date": "2025-02-18",\n    "current_fiscal_year_eps_mean": 0.6,\n    "current_fiscal_year_sales_mean_millions": 4938.35,\n    "current_quarter_eps_mean": 0.17,\n    "current_quarter_sales_estimate_millions": 1313.37,\n    "next_quarter_eps_mean": 0.17,\n    "next_quarter_sales_estimate_millions": 1353.81\n  }'
     os.environ["DEPLOYMENT_TYPE"] = 'local'
     os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
     os.environ["DISCORD_WEBHOOK_URL"] = os.getenv("DISCORD_WEBHOOK_URL")
