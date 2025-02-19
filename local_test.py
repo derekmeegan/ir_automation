@@ -19,11 +19,11 @@ class DummyContext:
 if __name__ == "__main__":
     # Set up environment variables for local testing.
     os.environ["QUARTER"] = '4'
-    os.environ["YEAR"] = '2023'
-    os.environ["TICKER"] = "ANET"
-    os.environ["CSV_URI"] = "s3://bucket/path/to/csv"
+    os.environ["YEAR"] = '2024'
+    os.environ["JSON_URI"] = "s3://bucket/path/to/json"
     os.environ["DEPLOYMENT_TYPE"] = 'local'
     os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+    os.environ["DISCORD_WEBHOOK_URL"] = os.getenv("DISCORD_WEBHOOK_URL")
     # SITE_CONFIG should be a JSON string.
     # os.environ["SITE_CONFIG"] = json.dumps({
     #    "base_url": "https://ir.enovix.com/",
@@ -231,4 +231,3 @@ if __name__ == "__main__":
     context = DummyContext()
 
     result = lambda_handler(event, context)
-    print("Result:", result)

@@ -12,9 +12,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     config = {
         'quarter': os.environ.get("QUARTER", ""),
         'year': os.environ.get("YEAR", ""),
-        'csv_uri': os.environ.get("CSV_URI", ""),
+        'json_uri': os.environ.get("JSON_URI", ""),
         'deployment_type': os.environ.get("DEPLOYMENT_TYPE", ""),
         'groq_api_key': os.environ.get("GROQ_API_KEY", ""),
+        'discord_webhook_url': os.environ.get("DISCORD_WEBHOOK_URL", ""),
         **json.loads(os.environ.get("SITE_CONFIG", "{}"))
     }
 

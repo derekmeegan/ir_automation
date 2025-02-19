@@ -23,6 +23,12 @@ class MyServerlessStack(Stack):
             "GroqApiKeySecret",
             "IRWorkflow/GroqApiKey"
         )
+        
+        discord_webhook_url = secretsmanager.Secret.from_secret_name_v2(
+            self,
+            "DiscordWebhookURL",
+            "IRWorkflow/DiscordWebhookAPI"
+        )
 
         worker_lambda_execution_role = iam.Role(
             self,
@@ -35,8 +41,9 @@ class MyServerlessStack(Stack):
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         )
 
-        # Grant worker Lambda permission to access the secret
+        # Grant worker Lambda permission to access the secrets
         groq_api_secret.grant_read(worker_lambda_execution_role)
+        discord_webhook_url.grant_read(worker_lambda_execution_role)
 
         # 1) DynamoDB scheduling table
         scheduling_table = dynamodb.Table(
@@ -104,7 +111,8 @@ class MyServerlessStack(Stack):
                 "CONFIG_TABLE": config_table.table_name,
                 "JSON_BUCKET": json_bucket.bucket_name,
                 "AWS_ACCOUNT_ID": self.account,
-                "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn,  # if using Secrets Manager
+                "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
+                "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn
             },
         )
 

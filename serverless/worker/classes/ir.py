@@ -38,14 +38,26 @@ class IRWorkflow:
         self.page_content_selector = config.get("page_content_selector", "body")
         self.secret_arn = os.environ.get("GROQ_API_SECRET_ARN")
         self.deployment_type = config.get("deployment_type", "hosted")
-        self.api_key = config.get("groq_api_key", self._get_api_key())
+        self.groq_api_key = config.get("groq_api_key", self._get_groq_api_key())
+        self.discord_webhook_url = config.get("discord_webhook_url", self._get_discord_webhook_url())
         self.quarter = config.get('quarter')
         self.year = config.get('year')
         self.ticker = config.get('ticker')
-        self.csv_uri = config.get('csv_uri')
+        self.json_uri = config.get('json_uri')
         self.llm_instructions = config.get('llm_instructions')
 
-    def _get_api_key(self):
+    def _get_discord_webhook_url(self):
+        """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
+        if self.deployment_type != 'local':
+            if self.secret_arn:
+                secrets_client = boto3.client("secretsmanager")
+                response = secrets_client.get_secret_value(SecretId=self.secret_arn)
+                secret_dict = json.loads(response["SecretString"])
+                return secret_dict.get("DISCORD_WEBHOOK_URL")
+            else:
+                raise ValueError("Missing DISCORD_WEBHOOK_URL environment variable")
+
+    def _get_groq_api_key(self):
         """Retrieve th e Groq API key from AWS Secrets Manager."""
         if self.deployment_type != 'local':
             if self.secret_arn:
@@ -270,6 +282,15 @@ class IRWorkflow:
             await asyncio.sleep(interval)
         raise Exception("Link not found after polling")
 
+    def punt_message_to_discord(self, discord_message: str) -> None:
+        requests.post(
+            self.discord_webhook_url, 
+            json={
+                "content": discord_message,
+                "username": "EarningsEar"
+            }
+        )
+
     async def process_earnings(self) -> Dict[str, Any]:
         """
         Main workflow: poll for link, extract content (PDF or HTML), and send to LLM for processing.
@@ -283,7 +304,8 @@ class IRWorkflow:
             content = await self.extract_html_text(link)
         # Call LLM function asynchronously. Here we assume a separate async function for groq.
         metrics = await self.extract_financial_metrics(content)
-        return self.analyze_financial_metrics(metrics)
+        discord_message = self.analyze_financial_metrics(metrics)
+        self.punt_message_to_discord(discord_message)
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         # Extract historical and reported metrics
@@ -359,7 +381,7 @@ class IRWorkflow:
         Sends the PDF text to a GPT-like service and returns a dictionary
         with extracted financial metrics such as EPS, net sales, and operating income.
         """
-        client = Groq(api_key=self.api_key)
+        client = Groq(api_key=self.groq_api_key)
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
