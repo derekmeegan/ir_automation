@@ -63,11 +63,20 @@ class MyServerlessStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
 
-        csv_bucket = s3.Bucket(
+        json_bucket = s3.Bucket(
             self,
-            "CSVBucket",
+            "JSONBucket",
             removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
+            auto_delete_objects=True,
+            public_read_access=True
+        )
+        
+        json_bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject"],
+                resources=[f"{json_bucket.bucket_arn}/*"],
+                principals=[iam.AnyPrincipal()]
+            )
         )
 
         # 2) Docker image for the WORKER function
@@ -93,7 +102,7 @@ class MyServerlessStack(Stack):
                 "WORKER_EXECUTION_ROLE": worker_lambda_execution_role.role_arn,
                 "HISTORICAL_TABLE": historical_table.table_name,
                 "CONFIG_TABLE": config_table.table_name,
-                "CSV_BUCKET": csv_bucket.bucket_name,
+                "JSON_BUCKET": json_bucket.bucket_name,
                 "AWS_ACCOUNT_ID": self.account,
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn,  # if using Secrets Manager
             },
@@ -103,7 +112,7 @@ class MyServerlessStack(Stack):
         scheduling_table.grant_read_data(manager_function)
         historical_table.grant_read_data(manager_function)
         config_table.grant_read_data(manager_function)
-        csv_bucket.grant_write(manager_function)
+        json_bucket.grant_write(manager_function)
 
         # Grant manager function permission to create/update worker Lambdas
         manager_function.role.add_to_principal_policy(

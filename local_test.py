@@ -19,7 +19,7 @@ class DummyContext:
 if __name__ == "__main__":
     # Set up environment variables for local testing.
     os.environ["QUARTER"] = '4'
-    os.environ["YEAR"] = '2024'
+    os.environ["YEAR"] = '2023'
     os.environ["TICKER"] = "ANET"
     os.environ["CSV_URI"] = "s3://bucket/path/to/csv"
     os.environ["DEPLOYMENT_TYPE"] = 'local'
@@ -78,20 +78,94 @@ if __name__ == "__main__":
     #     },
     #     "polling_config": {"interval": 2, "max_attempts": 30}
     # })
+    # os.environ["SITE_CONFIG"] = json.dumps({
+    #     "ticker":"ANET",
+    #     "base_url": "https://investors.arista.com/Communications/Press-Releases-and-Events/default.aspx",
+    #     "link_template": "https://s21.q4cdn.com/861911615/files/doc_news/Arista-Networks-Inc.-Reports-{quarter}-Quarter-{year}-Financial-Results-{current_year}.pdf",
+    #     "url_keywords": {
+    #         "requires_year": True,
+    #         "requires_current_year": True, 
+    #         "requires_quarter": True,
+    #         "quarter_as_string": True,
+    #         "quarter_is_title_case": True,
+    #         "fixed_terms": ['-quarter']
+    #     },
+    #     "selectors": ["a.evergreen-news-attachment-PDF"],
+    #     "key_phrase": "Download",
+    #     "refine_link_list": True,
+    #     "verify_keywords": {
+    #         "requires_year": True,
+    #         "requires_quarter": True,
+    #         "quarter_as_string": True,
+    #         "fixed_terms": ['-quarter']
+    #     },
+    #     "extraction_method": 'pdf',
+    #     "custom_pdf_edit": None,  # or a function that modifies the PDF text
+    #     "llm_instructions": {
+    #         "system": """
+    #         You will receive a body of text containing a company's financial report and historical financial metrics. Your task is to:
+
+    #         1. **Extract Key Financial Metrics:**
+    #         - Revenue (most recent quarter)
+    #         - GAAP EPS (most recent quarter)
+    #         - Non-GAAP EPS (most recent quarter)
+    #         - Forward guidance for revenue and margins (if available)
+
+    #         2. **Compare Metrics:**
+    #         Provide these metrics in the following format:
+    #         - "Revenue: $X billion"
+    #         - "GAAP EPS: $X"
+    #         - "Non-GAAP EPS: $X"
+    #         - "Forward Guidance: Revenue: $X - $Y billion; Non-GAAP Gross Margin: X% - Y%"
+
+    #         3. **Classify Sentiment:**
+    #         - Identify forward guidance statements that could impact future performance.
+    #         - Classify them as:
+    #             - "Bullish" if they indicate growth, expansion, or optimistic outlook.
+    #             - "Bearish" if they indicate contraction, risks, or cautious guidance.
+    #             - "Neutral" if guidance is stable or lacks clear directional information.
+
+    #         4. **Output Structure:**
+    #         Produce the output as a JSON object with the following structure. If there are not ranges for forward guidance, provide the same number twice:
+    #         {
+    #             "metrics": {
+    #             "revenue_billion": X.XX,
+    #             "gaap_eps": X.XX,
+    #             "non_gaap_eps": X.XX,
+    #             "forward_guidance": {
+    #                 "revenue_billion_range": [X.XX, Y.YY],
+    #                 "non_gaap_gross_margin_range": [X, Y],
+    #                 "non_gaap_operating_margin_range": [X, Y]
+    #             }
+    #             },
+    #             "sentiment_snippets": [
+    #             {"snippet": "Text excerpt here", "classification": "Bullish/Bearish/Neutral"}
+    #             ]
+    #         }
+
+    #         5. **Highlight Context:**
+    #         Include the exact text excerpts as "snippets" from the report that support each sentiment classification.
+
+    #         Pass this JSON output to the Python function for comparison.
+    #         """,
+    #         "temperature": 0
+    #     },
+    #     "polling_config": {"interval": 2, "max_attempts": 30}
+    # })
     os.environ["SITE_CONFIG"] = json.dumps({
-        "ticker":"ANET",
-        "base_url": "https://investors.arista.com/Communications/Press-Releases-and-Events/default.aspx",
-        "link_template": "https://s21.q4cdn.com/861911615/files/doc_news/Arista-Networks-Inc.-Reports-{quarter}-Quarter-{year}-Financial-Results-{current_year}.pdf",
+        "ticker":"TOST",
+        "base_url": "https://investors.toasttab.com/news/default.aspx",
+        "link_template": "https://investors.toasttab.com/news/news-details/{current_year}/Toast-Announces-{quarter}-Quarter-and-Full-Year-{year}-Financial-Results/default.aspx",
         "url_keywords": {
             "requires_year": True,
             "requires_current_year": True, 
             "requires_quarter": True,
             "quarter_as_string": True,
             "quarter_is_title_case": True,
-            "fixed_terms": ['-quarter']
+            "fixed_terms": ['-Quarter']
         },
-        "selectors": ["a.evergreen-news-attachment-PDF"],
-        "key_phrase": "Download",
+        "selectors": ["a.evergreen-news-headline-link"],
+        "key_phrase": "Toast Announces",
         "refine_link_list": True,
         "verify_keywords": {
             "requires_year": True,
@@ -99,7 +173,6 @@ if __name__ == "__main__":
             "quarter_as_string": True,
             "fixed_terms": ['-quarter']
         },
-        "extraction_method": 'pdf',
         "custom_pdf_edit": None,  # or a function that modifies the PDF text
         "llm_instructions": {
             "system": """

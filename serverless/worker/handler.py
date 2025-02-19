@@ -23,4 +23,5 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         metrics = asyncio.run(workflow.process_earnings())
     except Exception as e:
         return {"error": str(e)}
+
     return metrics

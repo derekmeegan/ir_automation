@@ -1,6 +1,4 @@
 import os
-import csv
-import io
 import boto3
 import json
 from datetime import datetime
@@ -13,7 +11,7 @@ WORKER_EXECUTION_ROLE = os.environ["WORKER_EXECUTION_ROLE"]
 # Additional environment variables (set via CDK)
 HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
-CSV_BUCKET = os.environ["CSV_BUCKET"]
+JSON_BUCKET = os.environ["JSON_BUCKET"]
 
 dynamo = boto3.resource("dynamodb")
 lambda_client = boto3.client("lambda")
@@ -23,7 +21,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     - Reads today's records from the scheduling table.
     - For each record (ticker, date, quarter, release_time),
-      1) Generates a CSV from the historical table,
+      1) Generates a JSON file from the historical table,
          retrieves a JSON site config from the config table,
          and passes these values along with other variables.
       2) Creates/updates a dedicated worker Lambda with the additional variables.
@@ -51,15 +49,15 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         quarter = item.get("quarter")
         year = item.get("year")
 
-        # 1) Generate CSV from historical data and retrieve site config.
-        csv_uri = generate_csv_for_ticker(ticker, today_str)
+        # 1) Generate JSON from historical data and retrieve site config.
+        json_uri = generate_json_for_ticker(ticker, today_str)
         site_config = get_site_config(ticker)
 
         # Compose environment variables for the worker.
         variables = {
             "QUARTER": quarter,
             "YEAR": year,
-            "CSV_URI": csv_uri,
+            "JSON_URI": json_uri,
             "SITE_CONFIG": site_config,
         }
 
@@ -75,10 +73,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     return {"created_or_updated": created_or_updated}
 
-def generate_csv_for_ticker(ticker: str, today_str: str) -> str:
+def generate_json_for_ticker(ticker: str, today_str: str) -> str:
     """
-    Query the historical table for a given ticker, generate a CSV in memory,
-    and upload it to the CSV bucket. Returns the S3 URI of the uploaded CSV.
+    Query the historical table for a given ticker, generate a JSON file in memory,
+    and upload it to the bucket. Returns the S3 URI.
     """
     historical_table = dynamo.Table(HISTORICAL_TABLE)
     response = historical_table.query(
@@ -90,18 +88,15 @@ def generate_csv_for_ticker(ticker: str, today_str: str) -> str:
     if not items:
         raise ValueError(f"No historical data found for ticker {ticker}")
 
-    output = io.StringIO()
-    # Use the keys from the first item as CSV header.
-    writer = csv.DictWriter(output, fieldnames=list(items[0].keys()))
-    writer.writeheader()
-    writer.writerows(items)
-    csv_data = output.getvalue()
+    json_data = json.dumps(items, indent=2)
 
+    # Upload to S3
     s3_client = boto3.client("s3")
-    csv_key = f"{ticker}/{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
-    s3_client.put_object(Bucket=CSV_BUCKET, Key=csv_key, Body=csv_data)
-    s3_uri = f"s3://{CSV_BUCKET}/{csv_key}"
-    return s3_uri
+    json_key = f"{ticker}/{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}.json"
+    s3_client.put_object(Bucket=JSON_BUCKET, Key=json_key, Body=json_data, ContentType="application/json")
+
+    # Return the S3 URI
+    return f"s3://{JSON_BUCKET}/{json_key}"
 
 def get_site_config(ticker: str) -> str:
     """

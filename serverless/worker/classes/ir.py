@@ -30,7 +30,7 @@ class IRWorkflow:
         self.key_phrase: str = config.get("key_phrase", "Shareholder Letter")
         self.verify_keywords = config.get("verify_keywords", {})
         self.url_keywords = config.get("url_keywords", {})
-        self.extraction_method: str = config.get("extraction_method", "pdf")
+        self.extraction_method: str = config.get("extraction_method", None)
         self.custom_pdf_edit: Optional[Callable[[str], str]] = config.get("custom_pdf_edit")
         self.llm_instructions: Dict[str, Any] = config.get("llm_instructions", {})
         self.polling_config: Dict[str, Any] = config.get("polling_config", {"interval": 60})
@@ -92,9 +92,10 @@ class IRWorkflow:
                     keywords.update({'quarter': quarter})
 
                 link = self.link_template.format(**self.url_keywords)
-                print(link)
-                # Optionally test if this link exists (using a HEAD request)
-                response = requests.head(link)
+                response = requests.head(
+                    link, 
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                )
                 if response.ok:
                     return link
             except Exception as e:
@@ -286,15 +287,25 @@ class IRWorkflow:
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         # Extract historical and reported metrics
+        # hist = {
+        #     "ticker": "ANSET",
+        #     "date": "2025-02-18",
+        #     "current_fiscal_year_eps_mean": 2.19,
+        #     "current_fiscal_year_sales_mean_millions": 6969.55,
+        #     "current_quarter_eps_mean": 0.57,
+        #     "current_quarter_sales_estimate_millions": 1899.67,
+        #     "next_quarter_eps_mean": 0.56,
+        #     "next_quarter_sales_estimate_millions": 1898.7
+        # }
         hist = {
-            "ticker": "ANSET",
+            "ticker": "TOST",
             "date": "2025-02-18",
-            "current_fiscal_year_eps_mean": 2.19,
-            "current_fiscal_year_sales_mean_millions": 6969.55,
-            "current_quarter_eps_mean": 0.57,
-            "current_quarter_sales_estimate_millions": 1899.67,
-            "next_quarter_eps_mean": 0.56,
-            "next_quarter_sales_estimate_millions": 1898.7
+            "current_fiscal_year_eps_mean": 0.6,
+            "current_fiscal_year_sales_mean_millions": 4938.35,
+            "current_quarter_eps_mean": 0.17,
+            "current_quarter_sales_estimate_millions": 1313.37,
+            "next_quarter_eps_mean": 0.17,
+            "next_quarter_sales_estimate_millions": 1353.81
         }
         reported = extracted_data['metrics']
 
