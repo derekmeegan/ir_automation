@@ -81,7 +81,7 @@ class MyServerlessStack(Stack):
         disabler_function = PythonFunction(
             self,
             "DisablerFunction",
-            entry="serverless/disabler",
+            entry="../serverless/disabler",
             index="disabler.py",
             handler="lambda_handler",
             runtime=lambda_.Runtime.PYTHON_3_9,
