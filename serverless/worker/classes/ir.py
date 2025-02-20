@@ -36,7 +36,7 @@ class IRWorkflow:
         self.polling_config: Dict[str, Any] = config.get("polling_config", {"interval": 60})
         self.refine_link_list = config.get('refine_link_list', False)
         self.page_content_selector = config.get("page_content_selector", "body")
-        self.secret_arn = os.environ.get("groq_api_secret_arn")
+        self.secret_arn = config.get("groq_api_secret_arn")
         self.deployment_type = config.get("deployment_type", "hosted")
         self.groq_api_key = config.get("groq_api_key", self._get_groq_api_key())
         self.discord_webhook_arn = config.get("discord_webhook_arn")
