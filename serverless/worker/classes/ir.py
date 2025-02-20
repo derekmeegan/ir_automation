@@ -36,9 +36,10 @@ class IRWorkflow:
         self.polling_config: Dict[str, Any] = config.get("polling_config", {"interval": 60})
         self.refine_link_list = config.get('refine_link_list', False)
         self.page_content_selector = config.get("page_content_selector", "body")
-        self.secret_arn = os.environ.get("GROQ_API_SECRET_ARN")
+        self.secret_arn = os.environ.get("groq_api_secret_arn")
         self.deployment_type = config.get("deployment_type", "hosted")
         self.groq_api_key = config.get("groq_api_key", self._get_groq_api_key())
+        self.discord_webhook_arn = config.get("discord_webhook_arn")
         self.discord_webhook_url = config.get("discord_webhook_url", self._get_discord_webhook_url())
         self.quarter = config.get('quarter')
         self.year = config.get('year')
@@ -50,9 +51,9 @@ class IRWorkflow:
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
         if self.deployment_type != 'local':
-            if self.secret_arn:
+            if self.discord_webhook_arn:
                 secrets_client = boto3.client("secretsmanager")
-                response = secrets_client.get_secret_value(SecretId=self.secret_arn)
+                response = secrets_client.get_secret_value(SecretId=self.discord_webhook_arn)
                 secret_dict = json.loads(response["SecretString"])
                 return secret_dict.get("DISCORD_WEBHOOK_URL")
             else:

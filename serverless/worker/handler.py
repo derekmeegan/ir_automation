@@ -19,7 +19,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         'year': os.environ.get("YEAR", ""),
         'json_data': os.environ.get("JSON_DATA", ""),
         'deployment_type': deployment_type,
+        'groq_api_secret_arn': os.environ.get("GROQ_API_SECRET_ARN", ""),
         'groq_api_key': os.environ.get("GROQ_API_KEY", ""),
+        'discord_webhook_arn': os.environ.get("DISCORD_WEBHOOK_SECRET_ARN", ""),
         'discord_webhook_url': os.environ.get("DISCORD_WEBHOOK_URL", ""),
         **json.loads(os.environ.get("SITE_CONFIG", "{}"))
     }
