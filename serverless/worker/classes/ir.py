@@ -79,7 +79,6 @@ class IRWorkflow:
         """
         if self.link_template:
             print('Link template present, attempting to use it first')
-            # Example: replace placeholders with verify_keywords values
             try:
                 keywords = self.url_keywords
                 if keywords.get('requires_year', False):

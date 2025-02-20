@@ -18,9 +18,9 @@ class DummyContext:
 
 if __name__ == "__main__":
     # Set up environment variables for local testing.
-    os.environ["QUARTER"] = '4'
+    os.environ["QUARTER"] = '3'
     os.environ["YEAR"] = '2024'
-    os.environ["JSON_DATA"] = '{\n    "ticker": "TOST",\n    "date": "2025-02-18",\n    "current_fiscal_year_eps_mean": 0.6,\n    "current_fiscal_year_sales_mean_millions": 4938.35,\n    "current_quarter_eps_mean": 0.17,\n    "current_quarter_sales_estimate_millions": 1313.37,\n    "next_quarter_eps_mean": 0.17,\n    "next_quarter_sales_estimate_millions": 1353.81\n  }'
+    os.environ["JSON_DATA"] = '{\n  "ticker": "XYZ",\n  "date": "2025-02-18",\n  "current_fiscal_year_eps_mean": 3.55,\n  "current_fiscal_year_sales_mean_millions": 24449.56,\n  "current_quarter_eps_mean": 0.88,\n  "current_quarter_sales_estimate_millions": 6294.55,\n  "next_quarter_eps_mean": 1,\n  "next_quarter_sales_estimate_millions": 6528.98\n}'
     os.environ["DEPLOYMENT_TYPE"] = 'local'
     os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
     os.environ["DISCORD_WEBHOOK_URL"] = os.getenv("DISCORD_WEBHOOK_URL")
@@ -152,27 +152,92 @@ if __name__ == "__main__":
     #     },
     #     "polling_config": {"interval": 2, "max_attempts": 30}
     # })
+    # os.environ["SITE_CONFIG"] = json.dumps({
+    #     "ticker":"TOST",
+    #     "base_url": "https://investors.toasttab.com/news/default.aspx",
+    #     "link_template": "https://investors.toasttab.com/news/news-details/{current_year}/Toast-Announces-{quarter}-Quarter-and-Full-Year-{year}-Financial-Results/default.aspx",
+    #     "url_keywords": {
+    #         "requires_year": True,
+    #         "requires_current_year": True, 
+    #         "requires_quarter": True,
+    #         "quarter_as_string": True,
+    #         "quarter_is_title_case": True,
+    #         "fixed_terms": ['-Quarter']
+    #     },
+    #     "selectors": ["a.evergreen-news-headline-link"],
+    #     "key_phrase": "Toast Announces",
+    #     "refine_link_list": True,
+    #     "verify_keywords": {
+    #         "requires_year": True,
+    #         "requires_quarter": True,
+    #         "quarter_as_string": True,
+    #         "fixed_terms": ['-quarter']
+    #     },
+    #     "custom_pdf_edit": None,  # or a function that modifies the PDF text
+    #     "llm_instructions": {
+    #         "system": """
+    #         You will receive a body of text containing a company's financial report and historical financial metrics. Your task is to:
+
+    #         1. **Extract Key Financial Metrics:**
+    #         - Revenue (most recent quarter)
+    #         - GAAP EPS (most recent quarter)
+    #         - Non-GAAP EPS (most recent quarter)
+    #         - Forward guidance for revenue and margins (if available)
+
+    #         2. **Compare Metrics:**
+    #         Provide these metrics in the following format:
+    #         - "Revenue: $X billion"
+    #         - "GAAP EPS: $X"
+    #         - "Non-GAAP EPS: $X"
+    #         - "Forward Guidance: Revenue: $X - $Y billion; Non-GAAP Gross Margin: X% - Y%"
+
+    #         3. **Classify Sentiment:**
+    #         - Identify forward guidance statements that could impact future performance.
+    #         - Classify them as:
+    #             - "Bullish" if they indicate growth, expansion, or optimistic outlook.
+    #             - "Bearish" if they indicate contraction, risks, or cautious guidance.
+    #             - "Neutral" if guidance is stable or lacks clear directional information.
+
+    #         4. **Output Structure:**
+    #         Produce the output as a JSON object with the following structure. If there are not ranges for forward guidance, provide the same number twice:
+    #         {
+    #             "metrics": {
+    #             "revenue_billion": X.XX,
+    #             "gaap_eps": X.XX,
+    #             "non_gaap_eps": X.XX,
+    #             "forward_guidance": {
+    #                 "revenue_billion_range": [X.XX, Y.YY],
+    #                 "non_gaap_gross_margin_range": [X, Y],
+    #                 "non_gaap_operating_margin_range": [X, Y]
+    #             }
+    #             },
+    #             "sentiment_snippets": [
+    #             {"snippet": "Text excerpt here", "classification": "Bullish/Bearish/Neutral"}
+    #             ]
+    #         }
+
+    #         5. **Highlight Context:**
+    #         Include the exact text excerpts as "snippets" from the report that support each sentiment classification.
+
+    #         Pass this JSON output to the Python function for comparison.
+    #         """,
+    #         "temperature": 0
+    #     },
+    #     "polling_config": {"interval": 2, "max_attempts": 30}
+    # })
     os.environ["SITE_CONFIG"] = json.dumps({
-        "ticker":"TOST",
-        "base_url": "https://investors.toasttab.com/news/default.aspx",
-        "link_template": "https://investors.toasttab.com/news/news-details/{current_year}/Toast-Announces-{quarter}-Quarter-and-Full-Year-{year}-Financial-Results/default.aspx",
-        "url_keywords": {
-            "requires_year": True,
-            "requires_current_year": True, 
-            "requires_quarter": True,
-            "quarter_as_string": True,
-            "quarter_is_title_case": True,
-            "fixed_terms": ['-Quarter']
-        },
-        "selectors": ["a.evergreen-news-headline-link"],
-        "key_phrase": "Toast Announces",
+        "ticker":"XYZ",
+        "base_url": "https://investors.block.xyz/financials/quarterly-earnings-reports/default.aspx",
+        "selectors": ["a.module_link"],
+        "key_phrase": "Shareholder Letter",
         "refine_link_list": True,
         "verify_keywords": {
             "requires_year": True,
             "requires_quarter": True,
-            "quarter_as_string": True,
-            "fixed_terms": ['-quarter']
+            "quarter_with_q": True,
+            "fixed_terms": []
         },
+        "extraction_method": "pdf",
         "custom_pdf_edit": None,  # or a function that modifies the PDF text
         "llm_instructions": {
             "system": """
