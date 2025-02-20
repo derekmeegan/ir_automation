@@ -77,7 +77,7 @@ def generate_json_for_ticker(ticker: str, today_str: str) -> str:
     item = response.get("Item", {})
     if not item:
         raise ValueError(f"No historical data found for ticker {ticker}")
-    return json.dumps(item, indent=2)
+    return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
 def get_site_config(ticker: str) -> str:
     """
@@ -86,9 +86,7 @@ def get_site_config(ticker: str) -> str:
     config_table = dynamo.Table(CONFIG_TABLE)
     response = config_table.get_item(Key={"ticker": ticker})
     item = response.get("Item", {})
-    # Assumes that the configuration is stored under the key 'config'
-    config_obj = item.get("config", {})
-    return json.dumps(config_obj, default=lambda o: float(o) if isinstance(o, Decimal) else o)
+    return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
 def create_or_update_worker_function(function_name: str, variables: dict) -> None:
     """
