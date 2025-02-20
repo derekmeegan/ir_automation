@@ -1,6 +1,7 @@
 import os
 import boto3
 import json
+from decimal import Decimal
 from datetime import datetime
 from typing import Any, Dict
 from boto3.dynamodb.conditions import Key
@@ -87,7 +88,7 @@ def get_site_config(ticker: str) -> str:
     item = response.get("Item", {})
     # Assumes that the configuration is stored under the key 'config'
     config_obj = item.get("config", {})
-    return json.dumps(config_obj)
+    return json.dumps(config_obj, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
 def create_or_update_worker_function(function_name: str, variables: dict) -> None:
     """
