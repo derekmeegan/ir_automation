@@ -75,7 +75,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 def generate_json_for_ticker(ticker: str, today_str: str) -> str:
     historical_table = dynamo.Table(HISTORICAL_TABLE)
-    response = historical_table.get_item(Key={"ticker": ticker})
+    response = historical_table.get_item(Key={"ticker": ticker, "date": today_str})
     item = response.get("Item", {})
     if not item:
         raise ValueError(f"No historical data found for ticker {ticker}")

@@ -54,12 +54,23 @@ class MyServerlessStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
 
+        scheduling_table.add_global_secondary_index(
+            index_name="date-index",
+            partition_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="date", type=dynamodb.AttributeType.STRING)
+        )
+
         historical_table = dynamodb.Table(
             self,
             "HistoricalTable",
             partition_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
             sort_key=dynamodb.Attribute(name="date", type=dynamodb.AttributeType.STRING),
             removal_policy=RemovalPolicy.DESTROY
+        )
+        historical_table.add_global_secondary_index(
+            index_name="date-index",
+            partition_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="date", type=dynamodb.AttributeType.STRING)
         )
 
         # Config Table (assumes partition key is "ticker")
