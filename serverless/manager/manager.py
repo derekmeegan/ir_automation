@@ -55,8 +55,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         # Compose environment variables for the worker.
         variables = {
-            "QUARTER": quarter,
-            "YEAR": year,
+            "QUARTER": str(int(float(quarter))),
+            "YEAR": str(int(float(year))),
             "JSON_DATA": json_data,
             "SITE_CONFIG": site_config,
             "PING_RULE_NAME":rule_name,
