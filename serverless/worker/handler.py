@@ -39,6 +39,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     return response.json()
                 break
         except Exception as e:
+            raise
             print({"error": str(e)})
             return {"error": str(e)}
 
