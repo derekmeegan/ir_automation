@@ -12,6 +12,8 @@ WORKER_EXECUTION_ROLE = os.environ["WORKER_EXECUTION_ROLE"]
 HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
 DISABLER_URL = os.environ["DISABLER_URL"]
+GROQ_API_SECRET_ARN = os.environ["GROQ_API_SECRET_ARN"]
+DISCORD_WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
 dynamo = boto3.resource("dynamodb")
 lambda_client = boto3.client("lambda")
@@ -62,6 +64,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "PING_RULE_NAME":rule_name,
             "PING_RULE_ID": event_id,
             "DISABLER_URL": DISABLER_URL,
+            "GROQ_API_SECRET_ARN": GROQ_API_SECRET_ARN,
+            "DISCORD_WEBHOOK_URL": DISCORD_WEBHOOK_URL
         }
 
         create_or_update_worker_function(function_name, variables)
