@@ -48,6 +48,7 @@ RUN python -m playwright install chromium
 FROM python:3.9-slim-bullseye
 
 ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=0
 
 # Install system dependencies required at runtime
 RUN apt-get update && apt-get install -y \
