@@ -160,6 +160,13 @@ class MyServerlessStack(Stack):
 
         manager_function.role.add_to_principal_policy(
             iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[f"arn:aws:iam::{self.account}:role/EventBridgeInvokeLambdaRole"],
+            )
+        )
+
+        manager_function.role.add_to_principal_policy(
+            iam.PolicyStatement(
                 actions=["dynamodb:Query"],
                 resources=[f"{scheduling_table.table_arn}/index/date-index"],
             )
