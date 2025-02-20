@@ -42,4 +42,4 @@ RUN playwright install chromium
 COPY . .
 
 # Use the AWS Lambda Runtime Interface Client as the entrypoint
-CMD [ "awslambdaric", "handler.lambda_handler" ]
+CMD ["aws-lambda-ric", "handler.lambda_handler"]
