@@ -50,6 +50,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         site_config = get_site_config(ticker)
 
         rule_name = f"PingRule-{ticker}-{today_str}"
+        function_name = f"WorkerFunction-{ticker}"
         event_id = _create_or_update_ping_rule(rule_name, function_name, release_time)
 
         # Compose environment variables for the worker.
@@ -63,10 +64,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "DISABLER_URL": DISABLER_URL,
         }
 
-        # 2) Create or update the worker Lambda for this ticker.
-        function_name = f"WorkerFunction-{ticker}"
         create_or_update_worker_function(function_name, variables)
-
         created_or_updated.append({"ticker": ticker, "function": function_name, "rule": rule_name})
 
     return {"created_or_updated": created_or_updated}
