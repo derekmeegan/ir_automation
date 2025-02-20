@@ -40,7 +40,7 @@ RUN pip install --target ${FUNCTION_DIR} awslambdaric
 RUN pip install --no-cache-dir --target ${FUNCTION_DIR} -r requirements.txt
 
 # Install Playwright and Chromium
-RUN playwright install chromium
+RUN python -m playwright install chromium
 
 ##############################
 # Final Stage
