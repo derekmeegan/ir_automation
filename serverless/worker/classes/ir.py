@@ -269,8 +269,8 @@ class IRWorkflow:
         Continually polls the IR page for the earnings link.
         Default polling interval is 5 seconds.
         """
-        interval: int = self.polling_config.get("interval", 5)
-        max_attempts: int = self.polling_config.get("max_attempts", 60)
+        interval: int = int(float(self.polling_config.get("interval", 5)))
+        max_attempts: int = int(float(self.polling_config.get("max_attempts", 60)))
         for attempt in range(max_attempts):
             try:
                 link = await self.get_earnings_link()
@@ -380,7 +380,7 @@ class IRWorkflow:
                     "content": pdf_text
                 }
             ],
-            temperature=self.llm_instructions.get('temperature'),
+            temperature=int(float(self.llm_instructions.get('temperature'))),
             response_format={"type": "json_object"}
         )
         
