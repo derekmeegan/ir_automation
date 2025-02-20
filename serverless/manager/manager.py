@@ -3,6 +3,7 @@ import boto3
 import json
 from datetime import datetime
 from typing import Any, Dict
+from boto3.dynamodb.conditions import Key
 
 DYNAMO_TABLE = os.environ["TABLE_NAME"]
 WORKER_IMAGE_URI = os.environ["WORKER_IMAGE_URI"]
@@ -30,12 +31,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     table = dynamo.Table(DYNAMO_TABLE)
 
     response = table.query(
-        IndexName="date-index",
-        KeyConditionExpression="#dt = :today",
-        ExpressionAttributeNames={"#dt": "date"},
-        ExpressionAttributeValues={":today": today_str}
+        KeyConditionExpression=Key("date").eq(today_str)
     )
-
     items = response.get("Items", [])
     print(f"Found {len(items)} items for {today_str}")
 
