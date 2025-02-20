@@ -9,6 +9,9 @@ FROM python:3.9-slim-bullseye AS build-stage
 ARG FUNCTION_DIR
 WORKDIR ${FUNCTION_DIR}
 
+# Set environment variable for Playwright in build stage
+ENV PLAYWRIGHT_BROWSERS_PATH=0
+
 # Copy all application code and requirements
 COPY . ${FUNCTION_DIR}
 
