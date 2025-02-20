@@ -96,7 +96,7 @@ class IRWorkflow:
                             2: 'second',
                             3: 'third',
                             4: 'fourth'
-                        }.get(int(quarter))
+                        }.get(int(float(quarter)))
                         if keywords.get('quarter_is_title_case', False):
                             quarter = quarter.title()
                     elif keywords.get('quarter_with_q', False):
@@ -172,7 +172,7 @@ class IRWorkflow:
                                     2: 'second',
                                     3: 'third',
                                     4: 'fourth'
-                                }.get(int(quarter))
+                                }.get(int(float(quarter)))
                             elif keywords.get('quarter_with_q', False):
                                 quarter = f'Q{quarter}'
 
