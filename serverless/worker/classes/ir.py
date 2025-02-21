@@ -127,7 +127,19 @@ class IRWorkflow:
             print(f"Iteration {attempt+1} of 5")
             candidate_elements = []
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-gpu",
+                        "--single-process",
+                        "--disable-dev-shm-usage",
+                        "--disable-software-rasterizer",
+                        "--disable-setuid-sandbox",
+                        "--disable-features=SitePerProcess",
+                        "--headless=new"
+                    ]
+                )
                 context = await browser.new_context(
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                                "AppleWebKit/537.36 (KHTML, like Gecko) "
