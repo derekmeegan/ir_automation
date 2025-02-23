@@ -104,6 +104,7 @@ class MyServerlessStack(Stack):
             entry="../serverless/enabler",
             index="enabler.py",
             handler="lambda_handler",
+            timeout=Duration.seconds(60*10),
             runtime=lambda_.Runtime.PYTHON_3_9,
         )
 
