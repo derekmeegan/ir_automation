@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_ecr_assets as ecr_assets,
     RemovalPolicy,
     Stack,
+    Duration
 )
 from aws_cdk.aws_lambda_python_alpha import PythonFunction
 from constructs import Construct
@@ -141,6 +142,7 @@ class MyServerlessStack(Stack):
             index="manager.py",
             handler="lambda_handler",
             runtime=lambda_.Runtime.PYTHON_3_9,
+            timeout=Duration.seconds(180),
             environment={
                 "TABLE_NAME": scheduling_table.table_name,
                 "WORKER_IMAGE_URI": worker_image_asset.image_uri,
