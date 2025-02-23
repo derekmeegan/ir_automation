@@ -10,12 +10,6 @@ app = Flask(__name__)
 
 @app.route("/process", methods=["POST"])
 def process() -> Any:
-    event: Dict[str, Any] = request.get_json() or {}
-    # No AWS Lambda context in this case
-    result = lambda_handler(event, None)
-    return jsonify(result)
-
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "")
     ping_rule_name = os.environ.get("PING_RULE_NAME", "")
     ping_rule_id = os.environ.get("PING_RULE_ID", "")
@@ -34,20 +28,16 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     workflow = IRWorkflow(config)
     while True:
-        try:
-            metrics = asyncio.run(workflow.process_earnings())
-            print(metrics)
-            if metrics is None:
-                if deployment_type != "local":
-                    payload: Dict[str, Any] = {"rule_name": ping_rule_name, "target_ids": [ping_rule_id]}
-                    response = requests.post(disabler_url, json=payload)
-                    response.raise_for_status()
-                    return response.json()
-                break
-        except Exception as e:
-            print({"error": str(e)})
-            return {"error": str(e)}
-    return metrics
+        metrics = asyncio.run(workflow.process_earnings())
+        print(metrics)
+        if metrics is None:
+            if deployment_type != "local":
+                payload: Dict[str, Any] = {"rule_name": ping_rule_name, "target_ids": [ping_rule_id]}
+                response = requests.post(disabler_url, json=payload)
+                response.raise_for_status()
+                return response.json()
+            break
+    return jsonify('Success')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

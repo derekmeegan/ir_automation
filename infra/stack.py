@@ -39,7 +39,6 @@ class MyServerlessStack(Stack):
             "Allow SSH access"
         )
 
-
         groq_api_secret = secretsmanager.Secret.from_secret_name_v2(
             self,
             "GroqApiKeySecret",
@@ -58,16 +57,13 @@ class MyServerlessStack(Stack):
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
         )
 
-        # Attach at least the basic execution policy for Lambda logs, etc.
         worker_lambda_execution_role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         )
 
-        # Grant worker Lambda permission to access the secrets
         groq_api_secret.grant_read(worker_lambda_execution_role)
         discord_webhook_url.grant_read(worker_lambda_execution_role)
 
-        # 1) DynamoDB scheduling table
         scheduling_table = dynamodb.Table(
             self,
             "SchedulingTable",
@@ -89,7 +85,6 @@ class MyServerlessStack(Stack):
             sort_key=dynamodb.Attribute(name="date", type=dynamodb.AttributeType.STRING)
         )
 
-        # Config Table (assumes partition key is "ticker")
         config_table = dynamodb.Table(
             self,
             "ConfigTable",
@@ -97,12 +92,10 @@ class MyServerlessStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
 
-        # 2) Docker image for the WORKER function
-        #    This pushes an image to ECR at deploy time.
         worker_image_asset = ecr_assets.DockerImageAsset(
             self,
             "WorkerImageAsset",
-            directory="../serverless/worker",  # Path to your Dockerfile and code
+            directory="../serverless/worker",
         )
 
         disabler_function = PythonFunction(
@@ -136,8 +129,6 @@ class MyServerlessStack(Stack):
             roles=[ec2_instance_role.role_name]
         )
 
-        # 3) Manager function (standard Python ZIP)
-        #    This function will read from the scheduling table and create new worker Lambdas.
         manager_function = PythonFunction(
             self,
             "ManagerFunction",
@@ -175,7 +166,6 @@ class MyServerlessStack(Stack):
                     "lambda:UpdateFunctionConfiguration",
                     "lambda:UpdateFunctionCode",
                     "lambda:GetFunction",
-                    # optionally "lambda:InvokeFunction" if needed
                 ],
                 resources=["*"],
             )
@@ -197,7 +187,6 @@ class MyServerlessStack(Stack):
             )
         )
 
-        # Permissions to manipulate EventBridge
         manager_function.role.add_to_principal_policy(
             iam.PolicyStatement(
                 actions=[
@@ -205,7 +194,6 @@ class MyServerlessStack(Stack):
                     "events:PutTargets",
                     "events:DeleteRule",
                     "events:RemoveTargets",
-                    # ...
                 ],
                 resources=["*"],
             )
@@ -239,7 +227,6 @@ class MyServerlessStack(Stack):
             )
         )
 
-        # 4) EventBridge rule to trigger manager function daily at 00:00 UTC
         daily_rule = events.Rule(
             self,
             "DailyManagerTrigger",
