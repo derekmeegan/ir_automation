@@ -69,7 +69,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN
         }
 
-        create_or_update_worker_function(function_name, variables)
+        create_or_update_worker_instance(function_name, variables)
         created_or_updated.append({"ticker": ticker, "function": function_name, "rule": rule_name})
 
     return {"created_or_updated": created_or_updated}
