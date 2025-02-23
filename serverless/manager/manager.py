@@ -151,13 +151,18 @@ docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_
     ]
     if instances:
         instance_id = instances[0]["InstanceId"]
+        print(f"EC2 instance {instance_name} ({instance_id}) found; stopping it before updating user data...")
+        ec2_client.stop_instances(InstanceIds=[instance_id])
+        waiter = ec2_client.get_waiter('instance_stopped')
+        waiter.wait(InstanceIds=[instance_id])
         print(f"EC2 instance {instance_name} ({instance_id}) found; updating user data and rebooting...")
         ec2_client.modify_instance_attribute(
             InstanceId=instance_id,
             UserData={"Value": encoded_user_data}
         )
-        ec2_client.reboot_instances(InstanceIds=[instance_id])
-        print(f"Instance {instance_id} has been rebooted to apply the new configuration.")
+        print(f"Starting instance {instance_id} to apply the new configuration...")
+        ec2_client.start_instances(InstanceIds=[instance_id])
+        print(f"Instance {instance_id} has been restarted with the updated user data.")
     else:
         print(f"Creating EC2 instance {instance_name} for running the Docker worker image...")
         response = ec2_client.run_instances(

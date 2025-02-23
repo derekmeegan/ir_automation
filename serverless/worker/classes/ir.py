@@ -53,7 +53,7 @@ class IRWorkflow:
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
         if self.deployment_type != 'local':
             if self.discord_webhook_arn:
-                secrets_client = boto3.client("secretsmanager")
+                secrets_client = boto3.client("secretsmanager", region_name='us-east-1')
                 response = secrets_client.get_secret_value(SecretId=self.discord_webhook_arn)
                 secret_dict = json.loads(response["SecretString"])
                 return secret_dict.get("DISCORD_WEBHOOK_URL")
@@ -64,7 +64,7 @@ class IRWorkflow:
         """Retrieve th e Groq API key from AWS Secrets Manager."""
         if self.deployment_type != 'local':
             if self.secret_arn:
-                secrets_client = boto3.client("secretsmanager")
+                secrets_client = boto3.client("secretsmanager", region_name='us-east-1')
                 response = secrets_client.get_secret_value(SecretId=self.secret_arn)
                 secret_dict = json.loads(response["SecretString"])
                 return secret_dict.get("GROQ_API_KEY")
