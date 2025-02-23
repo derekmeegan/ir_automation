@@ -126,7 +126,14 @@ class MyServerlessStack(Stack):
         before_market_rule = events.Rule(
             self,
             "BeforeMarketStartRule",
-            schedule=events.Schedule.cron(minute="55", hour="10", month="*", week_day="?", year="*")
+            schedule=events.Schedule.cron(
+                minute="55",
+                hour="10",
+                day="?",
+                month="*",
+                week_day="MON-FRI",
+                year="*"
+            )
         )
         before_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
             "release_time": "before"
@@ -135,7 +142,14 @@ class MyServerlessStack(Stack):
         after_market_rule = events.Rule(
             self,
             "AfterMarketStartRule",
-            schedule=events.Schedule.cron(minute="55", hour="19", month="*", week_day="?", year="*")
+            schedule=events.Schedule.cron(
+                minute="55",
+                hour="19",
+                day="?",
+                month="*",
+                week_day="MON-FRI",
+                year="*"
+            )
         )
         after_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
             "release_time": "after"
