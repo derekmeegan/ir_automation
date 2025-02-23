@@ -39,9 +39,9 @@ class IRWorkflow:
         self.page_content_selector = config.get("page_content_selector", "body")
         self.secret_arn = config.get("groq_api_secret_arn")
         self.deployment_type = config.get("deployment_type", "hosted")
-        self.groq_api_key = config.get("groq_api_key", self._get_groq_api_key())
+        self.groq_api_key = config.get("groq_api_key") or self._get_groq_api_key()
         self.discord_webhook_arn = config.get("discord_webhook_arn")
-        self.discord_webhook_url = config.get("discord_webhook_url", self._get_discord_webhook_url())
+        self.discord_webhook_url = config.get("discord_webhook_url") or self._get_discord_webhook_url()
         self.quarter = config.get('quarter')
         self.year = config.get('year')
         self.ticker = config.get('ticker')
@@ -386,6 +386,7 @@ class IRWorkflow:
         Sends the PDF text to a GPT-like service and returns a dictionary
         with extracted financial metrics such as EPS, net sales, and operating income.
         """
+        print(f'groq api key is a string: {isinstance(self.groq_api_key, str)} of length {None if not isinstance(self.groq_api_key, str) else len(self.groq_api_key)}')
         client = Groq(api_key=self.groq_api_key)
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
