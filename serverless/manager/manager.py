@@ -116,7 +116,8 @@ def create_or_update_worker_function(function_name: str, variables: dict) -> Non
             PackageType="Image",
             Code={"ImageUri": WORKER_IMAGE_URI},
             Timeout=900,
-            MemorySize=1024,
+            MemorySize=3000,
+            EphemeralStorage={"Size": 2048},
             Environment={"Variables": variables},
         )
 

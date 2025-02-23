@@ -127,6 +127,7 @@ class IRWorkflow:
             print(f"Iteration {attempt+1} of 5")
             candidate_elements = []
             async with async_playwright() as p:
+                print('launching chromium')
                 browser = await p.chromium.launch(
                     headless=True,
                     args=[
@@ -155,6 +156,8 @@ class IRWorkflow:
                     await page.wait_for_selector(self.selectors[0], timeout=5000)
                 except Exception as e:
                     print(f"Error waiting for selector '{self.selectors[0]}': {e}")
+
+                print('Extracted page content')
                 for selector in self.selectors:
                     elements = await page.query_selector_all(selector)
                     print(f"Found {len(elements)} elements with selector '{selector}'")
@@ -166,6 +169,7 @@ class IRWorkflow:
                 # If we want to refine the candidate list (or if no candidates found), check href values
                 if self.refine_link_list or not candidate_elements:
                     if candidate_elements:
+                        print('Refining candidate elements')
                         candidates = []
                         search_terms = []
                         keywords = self.verify_keywords
@@ -234,6 +238,8 @@ class IRWorkflow:
         link = await self._build_link_from_template()
         if link:
             return link
+
+        print('Template not available, scraping from IR site')
         return await self._scrape_ir_page_for_link()
 
     def extract_pdf_text(self, pdf_url: str) -> str:
