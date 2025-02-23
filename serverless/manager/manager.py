@@ -1,7 +1,6 @@
 import os
 import boto3
 import json
-import base64
 from decimal import Decimal
 from datetime import datetime
 from typing import Any, Dict
@@ -135,7 +134,6 @@ chkconfig docker on
 docker pull {WORKER_IMAGE_URI}
 docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
 """
-    encoded_user_data = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
     # Look for an existing instance with the given Name tag.
     response = ec2_client.describe_instances(
         Filters=[
@@ -153,7 +151,7 @@ docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_
         print(f"EC2 instance {instance_name} ({instance_id}) found; updating user data and rebooting...")
         ec2_client.modify_instance_attribute(
             InstanceId=instance_id,
-            UserData={"Value": encoded_user_data}
+            UserData={"Value": user_data_script}
         )
         ec2_client.reboot_instances(InstanceIds=[instance_id])
         print(f"Instance {instance_id} has been rebooted to apply the new configuration.")
@@ -165,7 +163,7 @@ docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_
             MinCount=1,
             MaxCount=1,
             KeyName = 'ir_worker',
-            UserData=encoded_user_data,
+            UserData=user_data_script,
             SubnetId=os.environ.get("SUBNET_ID"),
             SecurityGroupIds=[os.environ.get("INSTANCE_SECURITY_GROUP")],
             TagSpecifications=[
