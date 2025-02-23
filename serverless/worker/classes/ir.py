@@ -327,13 +327,11 @@ class IRWorkflow:
         # Call LLM function asynchronously. Here we assume a separate async function for groq.
         metrics = await self.extract_financial_metrics(content)
         discord_message = self.analyze_financial_metrics(metrics)
-        print(discord_message)
         print('punting discord message')
         self.punt_message_to_discord(discord_message)
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         hist = json.loads(self.json_data)
-        print(hist)
         reported = extracted_data['metrics']
 
         # Determine emojis for comparison
@@ -386,7 +384,6 @@ class IRWorkflow:
         Sends the PDF text to a GPT-like service and returns a dictionary
         with extracted financial metrics such as EPS, net sales, and operating income.
         """
-        print(f'groq api key is a string: {isinstance(self.groq_api_key, str)} of length {None if not isinstance(self.groq_api_key, str) else len(self.groq_api_key)}')
         client = Groq(api_key=self.groq_api_key)
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",

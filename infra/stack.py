@@ -98,18 +98,48 @@ class MyServerlessStack(Stack):
             directory="../serverless/worker",
         )
 
-        disabler_function = PythonFunction(
+        enabler_function = PythonFunction(
             self,
-            "DisablerFunction",
-            entry="../serverless/disabler",
-            index="disabler.py",
+            "EnablerFunction",
+            entry="../serverless/enabler",
+            index="enabler.py",
             handler="lambda_handler",
             runtime=lambda_.Runtime.PYTHON_3_9,
         )
 
-        disabler_function_url = disabler_function.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
+        enabler_function.role.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "ec2:DescribeInstances",
+                    "ec2:StartInstances",
+                    "ec2:StopInstances",
+                    "ec2:TerminateInstances",
+                    "ec2:RebootInstances",
+                    "ec2:RunInstances",
+                    "ec2:CreateTags",
+                    "ec2:ModifyInstanceAttribute"
+                ],
+                resources=["*"],
+            )
         )
+
+        before_market_rule = events.Rule(
+            self,
+            "BeforeMarketStartRule",
+            schedule=events.Schedule.cron(minute="55", hour="10", month="*", week_day="?", year="*")
+        )
+        before_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
+            "release_time": "before"
+        })))
+
+        after_market_rule = events.Rule(
+            self,
+            "AfterMarketStartRule",
+            schedule=events.Schedule.cron(minute="55", hour="19", month="*", week_day="?", year="*")
+        )
+        after_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
+            "release_time": "after"
+        })))
 
         ec2_instance_role = iam.Role(
             self,
@@ -118,6 +148,13 @@ class MyServerlessStack(Stack):
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryReadOnly")
             ]
+        )
+
+        ec2_instance_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["ec2:TerminateInstances"],
+                resources=["*"],  # or scope it to the instance ARN if desired
+            )
         )
 
         groq_api_secret.grant_read(ec2_instance_role)
@@ -146,7 +183,6 @@ class MyServerlessStack(Stack):
                 "AWS_ACCOUNT_ID": self.account,
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
                 "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn,
-                "DISABLER_URL": disabler_function_url.url,
                 "INSTANCE_PROFILE": instance_profile.ref,
                 "SUBNET_ID": vpc.public_subnets[0].subnet_id,
                 "INSTANCE_SECURITY_GROUP": instance_sg.security_group_id,
