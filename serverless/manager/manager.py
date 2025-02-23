@@ -130,7 +130,7 @@ apt-get update -y
 apt-get install -y docker.io
 systemctl start docker
 docker pull {WORKER_IMAGE_URI}
-docker run -d --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
+docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
 """
     # Look for an existing instance with the given Name tag.
     response = ec2_client.describe_instances(
@@ -210,4 +210,8 @@ def _get_event_invoke_role() -> str:
     Return an IAM role ARN that allows EventBridge to invoke the worker Lambda.
     """
     return f"arn:aws:iam::{os.environ['AWS_ACCOUNT_ID']}:role/EventBridgeInvokeLambdaRole"
+
+
+    
+
     
