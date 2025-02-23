@@ -2,6 +2,7 @@ import os
 import io
 import json
 import boto3
+import base64
 import asyncio
 import PyPDF2
 import requests
@@ -391,7 +392,7 @@ class IRWorkflow:
             messages=[
                 {
                     "role": "system",
-                    "content": self.llm_instructions.get('system')
+                    "content": base64.b64decode(self.llm_instructions.get('system')).decode("utf-8")
                 },
                 {
                     "role": "user",

@@ -185,7 +185,8 @@ class MyServerlessStack(Stack):
                     "ec2:TerminateInstances",
                     "ec2:RebootInstances",
                     "ec2:RunInstances",
-                    "ec2:CreateTags"
+                    "ec2:CreateTags",
+                    "ec2:ModifyInstanceAttribute"
                 ],
                 resources=["*"],
             )
