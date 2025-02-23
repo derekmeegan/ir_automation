@@ -117,6 +117,15 @@ class MyServerlessStack(Stack):
             auth_type=lambda_.FunctionUrlAuthType.NONE
         )
 
+        ec2_instance_role = iam.Role(
+            self,
+            "EC2InstanceRole",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryReadOnly")
+            ]
+        )
+
         # 3) Manager function (standard Python ZIP)
         #    This function will read from the scheduling table and create new worker Lambdas.
         manager_function = PythonFunction(
@@ -136,6 +145,7 @@ class MyServerlessStack(Stack):
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
                 "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn,
                 "DISABLER_URL": disabler_function_url.url,
+                "INSTANCE_PROFILE": ec2_instance_role.role_name,
                 "SUBNET_ID": vpc.public_subnets[0].subnet_id,
                 "INSTANCE_SECURITY_GROUP": instance_sg.security_group_id,
             },

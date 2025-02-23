@@ -165,6 +165,7 @@ docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_
             MinCount=1,
             MaxCount=1,
             KeyName = 'ir_worker',
+            IamInstanceProfile={'Name': os.environ.get("INSTANCE_PROFILE")},
             UserData=encoded_user_data,
             SubnetId=os.environ.get("SUBNET_ID"),
             SecurityGroupIds=[os.environ.get("INSTANCE_SECURITY_GROUP")],
