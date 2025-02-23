@@ -137,6 +137,19 @@ class MyServerlessStack(Stack):
             )
         )
 
+        manager_function.role.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "ec2:DescribeInstances",
+                    "ec2:StartInstances",
+                    "ec2:StopInstances",
+                    "ec2:TerminateInstances",
+                    "ec2:RebootInstances",
+                ],
+                resources=["*"],
+            )
+        )
+
         # Permissions to manipulate EventBridge
         manager_function.role.add_to_principal_policy(
             iam.PolicyStatement(

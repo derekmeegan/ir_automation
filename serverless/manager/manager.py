@@ -18,6 +18,7 @@ DISCORD_WEBHOOK_SECRET_ARN = os.environ["DISCORD_WEBHOOK_SECRET_ARN"]
 dynamo = boto3.resource("dynamodb")
 lambda_client = boto3.client("lambda")
 events_client = boto3.client("events")
+ec2_client = boto3.client("ec2")
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -90,36 +91,86 @@ def get_site_config(ticker: str) -> str:
     item = response.get("Item", {})
     return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
-def create_or_update_worker_function(function_name: str, variables: dict) -> None:
-    """
-    Create or update a worker Lambda that uses the shared Docker image,
-    passing the provided environment variables.
-    """
-    try:
-        # Check if the function exists.
-        lambda_client.get_function(FunctionName=function_name)
-        print(f"Worker Lambda {function_name} found; updating code and environment...")
-        # Update configuration (environment) and the container image.
-        lambda_client.update_function_configuration(
-            FunctionName=function_name,
-            Environment={"Variables": variables}
+# def create_or_update_worker_function(function_name: str, variables: dict) -> None:
+#     """
+#     Create or update a worker Lambda that uses the shared Docker image,
+#     passing the provided environment variables.
+#     """
+#     try:
+#         # Check if the function exists.
+#         lambda_client.get_function(FunctionName=function_name)
+#         print(f"Worker Lambda {function_name} found; updating code and environment...")
+#         # Update configuration (environment) and the container image.
+#         lambda_client.update_function_configuration(
+#             FunctionName=function_name,
+#             Environment={"Variables": variables}
+#         )
+#         lambda_client.update_function_code(
+#             FunctionName=function_name,
+#             ImageUri=WORKER_IMAGE_URI
+#         )
+#     except lambda_client.exceptions.ResourceNotFoundException:
+#         print(f"Creating worker Lambda {function_name} with image {WORKER_IMAGE_URI}...")
+#         lambda_client.create_function(
+#             FunctionName=function_name,
+#             Role=WORKER_EXECUTION_ROLE,
+#             PackageType="Image",
+#             Code={"ImageUri": WORKER_IMAGE_URI},
+#             Timeout=900,
+#             MemorySize=3000,
+#             EphemeralStorage={"Size": 2048},
+#             Environment={"Variables": variables},
+#         )
+
+def create_or_update_worker_instance(instance_name: str, variables: Dict[str, Any]) -> None:
+    # Build the Docker run command environment options.
+    env_options = " ".join(f"-e {key}='{value}'" for key, value in variables.items())
+    user_data_script = f"""#!/bin/bash
+apt-get update -y
+apt-get install -y docker.io
+systemctl start docker
+docker pull {WORKER_IMAGE_URI}
+docker run -d --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
+"""
+    # Look for an existing instance with the given Name tag.
+    response = ec2_client.describe_instances(
+        Filters=[
+            {"Name": "tag:Name", "Values": [instance_name]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopped"]},
+        ]
+    )
+    instances = [
+        instance
+        for reservation in response.get("Reservations", [])
+        for instance in reservation.get("Instances", [])
+    ]
+    if instances:
+        instance_id = instances[0]["InstanceId"]
+        print(f"EC2 instance {instance_name} ({instance_id}) found; updating user data and rebooting...")
+        ec2_client.modify_instance_attribute(
+            InstanceId=instance_id,
+            UserData={"Value": user_data_script}
         )
-        lambda_client.update_function_code(
-            FunctionName=function_name,
-            ImageUri=WORKER_IMAGE_URI
+        ec2_client.reboot_instances(InstanceIds=[instance_id])
+        print(f"Instance {instance_id} has been rebooted to apply the new configuration.")
+    else:
+        print(f"Creating EC2 instance {instance_name} for running the Docker worker image...")
+        response = ec2_client.run_instances(
+            ImageId="ami-0c104f6f4a5d9d1d5",  # Replace with an appropriate AMI that supports Docker.
+            InstanceType="c5.2xlarge",  # Sufficient compute for Chromium and Playwright.
+            MinCount=1,
+            MaxCount=1,
+            UserData=user_data_script,
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [{"Key": "Name", "Value": instance_name}],
+                }
+            ],
+            # Additional parameters (KeyName, SecurityGroupIds, SubnetId, etc.) may be required.
         )
-    except lambda_client.exceptions.ResourceNotFoundException:
-        print(f"Creating worker Lambda {function_name} with image {WORKER_IMAGE_URI}...")
-        lambda_client.create_function(
-            FunctionName=function_name,
-            Role=WORKER_EXECUTION_ROLE,
-            PackageType="Image",
-            Code={"ImageUri": WORKER_IMAGE_URI},
-            Timeout=900,
-            MemorySize=3000,
-            EphemeralStorage={"Size": 2048},
-            Environment={"Variables": variables},
-        )
+        instance_id = response["Instances"][0]["InstanceId"]
+        print(f"Created EC2 instance {instance_name} with ID {instance_id}.")
 
 def _create_or_update_ping_rule(rule_name: str, function_name: str, release_time: str) -> None:
     """
