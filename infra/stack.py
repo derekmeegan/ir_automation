@@ -32,6 +32,12 @@ class MyServerlessStack(Stack):
             ec2.Port.tcp(8080),
             "Allow inbound HTTP access on port 8080"
         )
+        instance_sg.add_ingress_rule(
+            ec2.Peer.any_ipv4(),  # Replace with your IP or a trusted CIDR range
+            ec2.Port.tcp(22),
+            "Allow SSH access"
+        )
+
 
         groq_api_secret = secretsmanager.Secret.from_secret_name_v2(
             self,

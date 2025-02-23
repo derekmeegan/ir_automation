@@ -160,6 +160,7 @@ docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_
             InstanceType="c5.2xlarge",  # Sufficient compute for Chromium and Playwright.
             MinCount=1,
             MaxCount=1,
+            KeyName = 'ir_worker',
             UserData=user_data_script,
             SubnetId=os.environ.get("SUBNET_ID"),
             SecurityGroupIds=[os.environ.get("INSTANCE_SECURITY_GROUP")],
@@ -211,7 +212,3 @@ def _get_event_invoke_role() -> str:
     """
     return f"arn:aws:iam::{os.environ['AWS_ACCOUNT_ID']}:role/EventBridgeInvokeLambdaRole"
 
-
-    
-
-    
