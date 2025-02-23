@@ -129,7 +129,6 @@ class MyServerlessStack(Stack):
             schedule=events.Schedule.cron(
                 minute="55",
                 hour="10",
-                day="?",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
@@ -145,7 +144,6 @@ class MyServerlessStack(Stack):
             schedule=events.Schedule.cron(
                 minute="55",
                 hour="19",
-                day="?",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
