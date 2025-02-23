@@ -161,6 +161,8 @@ docker run -d --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
             MinCount=1,
             MaxCount=1,
             UserData=user_data_script,
+            SubnetId=os.environ.get("SUBNET_ID"),
+            SecurityGroupIds=[os.environ.get("INSTANCE_SECURITY_GROUP")],
             TagSpecifications=[
                 {
                     "ResourceType": "instance",

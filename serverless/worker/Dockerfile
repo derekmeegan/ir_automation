@@ -169,6 +169,7 @@ COPY --from=build-stage ${FUNCTION_DIR} ${FUNCTION_DIR}
 RUN adduser --disabled-password --gecos "" appuser && chown -R appuser ${FUNCTION_DIR}
 USER appuser
 
+EXPOSE 8080
 # Set the container's entrypoint.
 # Adjust the command if your application's main script is different.
 CMD [ "python", "handler.py" ]

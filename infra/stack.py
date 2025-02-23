@@ -1,9 +1,9 @@
 from aws_cdk import (
     aws_secretsmanager as secretsmanager,
     aws_iam as iam,
+    aws_ec2 as ec2,
     aws_lambda as lambda_,
     aws_dynamodb as dynamodb,
-    aws_s3 as s3,
     aws_events as events,
     aws_events_targets as targets,
     aws_ecr_assets as ecr_assets,
@@ -17,6 +17,21 @@ from constructs import Construct
 class MyServerlessStack(Stack):
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
+
+        vpc = ec2.Vpc(self, "irVPC", max_azs=2)
+
+        instance_sg = ec2.SecurityGroup(
+            self,
+            "InstanceSecurityGroup",
+            vpc=vpc,
+            description="Allow inbound HTTP traffic on port 8080",
+            allow_all_outbound=True
+        )
+        instance_sg.add_ingress_rule(
+            ec2.Peer.any_ipv4(),
+            ec2.Port.tcp(8080),
+            "Allow inbound HTTP access on port 8080"
+        )
 
         groq_api_secret = secretsmanager.Secret.from_secret_name_v2(
             self,
@@ -115,6 +130,8 @@ class MyServerlessStack(Stack):
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
                 "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn,
                 "DISABLER_URL": disabler_function_url.url,
+                "SUBNET_ID": vpc.public_subnets[0].subnet_id,
+                "INSTANCE_SECURITY_GROUP": instance_sg.security_group_id,
             },
         )
 
@@ -194,3 +211,5 @@ class MyServerlessStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="0")
         )
         daily_rule.add_target(targets.LambdaFunction(manager_function))
+
+
