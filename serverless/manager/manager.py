@@ -126,9 +126,11 @@ def create_or_update_worker_instance(instance_name: str, variables: Dict[str, An
     # Build the Docker run command environment options.
     env_options = " ".join(f"-e {key}='{value}'" for key, value in variables.items())
     user_data_script = f"""#!/bin/bash
-apt-get update -y
-apt-get install -y docker.io
-systemctl start docker
+yum update -y
+amazon-linux-extras install docker -y
+service docker start
+usermod -a -G docker ec2-user
+chkconfig docker on
 docker pull {WORKER_IMAGE_URI}
 docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
 """
