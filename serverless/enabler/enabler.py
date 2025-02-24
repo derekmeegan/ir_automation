@@ -51,12 +51,28 @@ def lambda_handler(event, context):
     elif action == "stop":
         ec2_client.stop_instances(InstanceIds=instance_ids)
         return {"message": "Stopped instances", "instance_ids": instance_ids}
+        
+def wait_for_endpoint(url, timeout=600, interval=10):
+    """
+    Continuously attempts a GET request on the provided URL until a 200 response is received,
+    or until the timeout (in seconds) is reached.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                return True
+        except Exception as e:
+            # Likely connection error - the instance isn't ready yet.
+            pass
+        time.sleep(interval)
+    return False
 
 def poll_and_trigger(instance_ids):
     """
-    Continuously polls the given instance IDs until each one has a public IP (i.e. is fully initialized).
-    Once an instance is ready, it spawns a separate thread to send a POST request to its /process endpoint,
-    then removes it from the polling set.
+    Continuously polls the given instance IDs until each one has a public IP and its health-check endpoint is ready.
+    Once an instance is ready, spawn a thread to send a POST request to its /process endpoint, then remove it from the list.
     """
     remaining = set(instance_ids)
     while remaining:
@@ -67,12 +83,17 @@ def poll_and_trigger(instance_ids):
                 for inst in reservation.get("Instances", []):
                     public_ip = inst.get("PublicIpAddress")
             if public_ip:
-                url = f"http://{public_ip}:8080/process"
-                # Spawn a thread to send the POST request asynchronously.
-                threading.Thread(target=send_post, args=(url, instance_id)).start()
-                remaining.remove(instance_id)
+                # Construct the health-check URL (adjust if you have a dedicated health endpoint)
+                health_url = f"http://{public_ip}:8080/health"
+                if wait_for_endpoint(health_url, timeout=60, interval=5):
+                    # Now that the app is healthy, trigger the /process endpoint asynchronously.
+                    url = f"http://{public_ip}:8080/process"
+                    threading.Thread(target=send_post, args=(url, instance_id)).start()
+                    remaining.remove(instance_id)
+                else:
+                    print(f"Instance {instance_id} at {public_ip} not ready yet.")
         if remaining:
-            time.sleep(10)  # Poll every 10 seconds.
+            time.sleep(5)  # Wait a bit before polling again.
 
 def send_post(url, instance_id):
     try:

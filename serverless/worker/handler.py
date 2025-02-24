@@ -9,6 +9,10 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify('We running baby')
+
 @app.route("/process", methods=["POST"])
 def process() -> Any:
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "")
