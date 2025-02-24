@@ -91,9 +91,28 @@ amazon-linux-extras install docker -y
 service docker start
 usermod -a -G docker ec2-user
 chkconfig docker on
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin {os.environ['AWS_ACCOUNT_ID']}.dkr.ecr.us-east-1.amazonaws.com
-docker pull {WORKER_IMAGE_URI}
-docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+docker pull ${WORKER_IMAGE_URI}
+docker run -d -p 8080:8080 --restart unless-stopped ${env_options} ${WORKER_IMAGE_URI}
+
+# Create a systemd unit to ensure the Docker container is updated on every reboot.
+cat << 'EOF' > /etc/systemd/system/docker-restart.service
+[Unit]
+Description=Restart Docker Container for Worker
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker pull ${WORKER_IMAGE_URI} && /usr/bin/docker run -d -p 8080:8080 --restart unless-stopped ${env_options} ${WORKER_IMAGE_URI}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable the service so it runs on every boot.
+systemctl enable docker-restart.service
 """
     encoded_user_data = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
     response = ec2_client.describe_instances(
