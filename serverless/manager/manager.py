@@ -91,7 +91,7 @@ amazon-linux-extras install docker -y
 service docker start
 usermod -a -G docker ec2-user
 chkconfig docker on
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${os.environ['AWS_ACCOUNT_ID']}.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 699328772264.dkr.ecr.us-east-1.amazonaws.com
 docker pull ${WORKER_IMAGE_URI}
 docker run -d -p 8080:8080 --restart unless-stopped ${env_options} ${WORKER_IMAGE_URI}
 
