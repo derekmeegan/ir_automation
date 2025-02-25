@@ -25,7 +25,7 @@ def fetch_html(url: str) -> str:
 def lambda_handler(event, context):
     days_from_now = event.get('days', 7)
     today = datetime.utcnow().date()
-    target_date = today + timedelta(days=days_from_now)
+    target_date = today + timedelta(days=int(days_from_now))
     target_str = target_date.strftime("%Y-%m-%d")
     logger.info(f"Scraping earnings for {target_str}")
 
@@ -81,6 +81,7 @@ def lambda_handler(event, context):
             is_active = False
         )
         [['ticker', 'date', 'release_time', 'quarter', 'year', 'is_active']]
+        .drop_duplicates(subset = ['ticker', 'date'])
         .to_json(orient = 'records')
     )
     

@@ -39,7 +39,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     response = table.query(
         KeyConditionExpression=Key("date").eq(today_str),
-        FilterExpression=Attr("release_time").eq(release_time)
+        FilterExpression=Attr("release_time").eq(release_time) & Attr("is_active").eq(True)
     )
     items = response.get("Items", [])
     print(f"Found {len(items)} items for {today_str}")
