@@ -98,36 +98,6 @@ class MyServerlessStack(Stack):
             directory="../serverless/worker",
         )
 
-        before_market_rule = events.Rule(
-            self,
-            "BeforeMarketStartRule",
-            schedule=events.Schedule.cron(
-                minute="50",
-                hour="10",
-                month="*",
-                week_day="MON-FRI",
-                year="*"
-            )
-        )
-        before_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
-            "release_time": "before"
-        })))
-
-        after_market_rule = events.Rule(
-            self,
-            "AfterMarketStartRule",
-            schedule=events.Schedule.cron(
-                minute="50",
-                hour="19",
-                month="*",
-                week_day="MON-FRI",
-                year="*"
-            )
-        )
-        after_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
-            "release_time": "after"
-        })))
-
         ec2_instance_role = iam.Role(
             self,
             "EC2InstanceRole",
@@ -249,5 +219,35 @@ class MyServerlessStack(Stack):
                 resources=[f"{scheduling_table.table_arn}/index/date-index"],
             )
         )
+
+        before_market_rule = events.Rule(
+            self,
+            "BeforeMarketStartRule",
+            schedule=events.Schedule.cron(
+                minute="50",
+                hour="10",
+                month="*",
+                week_day="MON-FRI",
+                year="*"
+            )
+        )
+        before_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
+            "release_time": "before"
+        })))
+
+        after_market_rule = events.Rule(
+            self,
+            "AfterMarketStartRule",
+            schedule=events.Schedule.cron(
+                minute="50",
+                hour="19",
+                month="*",
+                week_day="MON-FRI",
+                year="*"
+            )
+        )
+        after_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
+            "release_time": "after"
+        })))
 
 
