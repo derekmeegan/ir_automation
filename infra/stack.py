@@ -250,12 +250,12 @@ class MyServerlessStack(Stack):
             "release_time": "after"
         })))
 
-        pandas_layer = lambda_.LayerVersion(
-            self, "PandasLayer",
-            code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer"),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
-            description="Layer with Pandas library"
-        )
+        # pandas_layer = lambda_.LayerVersion(
+        #     self, "PandasLayer",
+        #     code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer"),
+        #     compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
+        #     description="Layer with Pandas library"
+        # )
 
         scheduler_function = PythonFunction(
             self, 
@@ -264,7 +264,7 @@ class MyServerlessStack(Stack):
             entry="../serverless/scheduler",
             index="scheduler.py",
             handler="lambda_handler",
-            layers=[pandas_layer],
+            # layers=[pandas_layer],
             timeout=Duration.minutes(3),
             environment={ "TABLE_NAME": scheduling_table.table_name }
         )
