@@ -272,7 +272,7 @@ class MyServerlessStack(Stack):
 
         schedule_rule = events.Rule(
             self,
-            "AfterMarketStartRule",
+            "EarningsScheduleExtractionRule",
             schedule=events.Schedule.cron(
                 minute="0",
                 hour="0",
