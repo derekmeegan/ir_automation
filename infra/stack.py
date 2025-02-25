@@ -252,7 +252,7 @@ class MyServerlessStack(Stack):
 
         pandas_layer = lambda_.LayerVersion(
             self, "PandasLayer",
-            code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer/pandas"),
+            code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
             description="Layer with Pandas library"
         )
