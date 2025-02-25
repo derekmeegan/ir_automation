@@ -184,7 +184,7 @@ def poll_and_trigger(instance_ids):
             if public_ip:
                 # Construct the health-check URL (adjust if you have a dedicated health endpoint)
                 health_url = f"http://{public_ip}:8080/health"
-                if wait_for_endpoint(health_url, timeout=60, interval=5):
+                if wait_for_endpoint(health_url, timeout=60*5, interval=5):
                     # Now that the app is healthy, trigger the /process endpoint asynchronously.
                     url = f"http://{public_ip}:8080/process"
                     threading.Thread(target=send_post, args=(url, instance_id)).start()
