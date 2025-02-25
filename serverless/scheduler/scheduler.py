@@ -23,6 +23,7 @@ def fetch_html(url: str) -> str:
     return response.text
 
 def lambda_handler(event, context):
+    print(dir(pd))
     # Determine target date (one week from today)
     today = datetime.utcnow().date()
     target_date = today + timedelta(days=7)
