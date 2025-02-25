@@ -55,6 +55,7 @@ def lambda_handler(event, context):
             print(e)
             if 'tables found' not in str(e):
                 raise
+            break
         except Exception as e:
             logger.error(f"Attempt {attempt} failed to fetch data: {e}")
             if attempt == max_retries:
