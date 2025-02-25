@@ -75,8 +75,8 @@ def lambda_handler(event, context):
         .loc[lambda row: row.release_time.isin(['AMC', 'BMO'])]
         .assign(
             release_time = lambda df_: df_.release_time.map({'AMC': 'after', "BMO": "before"}),
-            quarter = lambda df_: df_.event_name.copy().str.split().str[0].str[1].astype(int),
-            year = lambda df_: df_.event_name.copy().str.split().str[1].astype(int),
+            quarter=lambda df: df.event_name.str.extract(r'(?i)q(\d)')[0].astype(int),
+            year=lambda df: df.event_name.str.extract(r'(?i)q\d.*?([0-9]{4})')[0].astype(int),
             date = target_str,
             is_active = False
         )
