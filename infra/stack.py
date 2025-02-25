@@ -98,44 +98,18 @@ class MyServerlessStack(Stack):
             directory="../serverless/worker",
         )
 
-        enabler_function = PythonFunction(
-            self,
-            "EnablerFunction",
-            entry="../serverless/enabler",
-            index="enabler.py",
-            handler="lambda_handler",
-            timeout=Duration.seconds(60*10),
-            runtime=lambda_.Runtime.PYTHON_3_9,
-        )
-
-        enabler_function.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "ec2:DescribeInstances",
-                    "ec2:StartInstances",
-                    "ec2:StopInstances",
-                    "ec2:TerminateInstances",
-                    "ec2:RebootInstances",
-                    "ec2:RunInstances",
-                    "ec2:CreateTags",
-                    "ec2:ModifyInstanceAttribute"
-                ],
-                resources=["*"],
-            )
-        )
-
         before_market_rule = events.Rule(
             self,
             "BeforeMarketStartRule",
             schedule=events.Schedule.cron(
-                minute="55",
+                minute="50",
                 hour="10",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
             )
         )
-        before_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
+        before_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
             "release_time": "before"
         })))
 
@@ -143,14 +117,14 @@ class MyServerlessStack(Stack):
             self,
             "AfterMarketStartRule",
             schedule=events.Schedule.cron(
-                minute="55",
+                minute="50",
                 hour="19",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
             )
         )
-        after_market_rule.add_target(targets.LambdaFunction(enabler_function, event=events.RuleTargetInput.from_object({
+        after_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
             "release_time": "after"
         })))
 
@@ -186,7 +160,7 @@ class MyServerlessStack(Stack):
             index="manager.py",
             handler="lambda_handler",
             runtime=lambda_.Runtime.PYTHON_3_9,
-            timeout=Duration.seconds(180),
+            timeout=Duration.seconds(60 * 15),
             environment={
                 "TABLE_NAME": scheduling_table.table_name,
                 "WORKER_IMAGE_URI": worker_image_asset.image_uri,
@@ -275,12 +249,5 @@ class MyServerlessStack(Stack):
                 resources=[f"{scheduling_table.table_arn}/index/date-index"],
             )
         )
-
-        daily_rule = events.Rule(
-            self,
-            "DailyManagerTrigger",
-            schedule=events.Schedule.cron(minute="0", hour="0")
-        )
-        daily_rule.add_target(targets.LambdaFunction(manager_function))
 
 

@@ -1,11 +1,14 @@
 import os
 import boto3
 import json
+import time
 import base64
+import requests
+import threading
 from decimal import Decimal
 from datetime import datetime
 from typing import Any, Dict
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 
 DYNAMO_TABLE = os.environ["TABLE_NAME"]
 WORKER_IMAGE_URI = os.environ["WORKER_IMAGE_URI"]
@@ -33,18 +36,19 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     table = dynamo.Table(DYNAMO_TABLE)
+    release_time = event.get("release_time")
 
     response = table.query(
-        KeyConditionExpression=Key("date").eq(today_str)
+        KeyConditionExpression=Key("date").eq(today_str),
+        FilterExpression=Attr("release_time").eq(release_time)
     )
     items = response.get("Items", [])
     print(f"Found {len(items)} items for {today_str}")
 
-    created_or_updated = []
+    instance_ids = []
 
     for item in items:
         ticker = item["ticker"]
-        release_time = item.get("release_time", "after").lower()  # "before" or "after"
         quarter = item.get("quarter")
         year = item.get("year")
 
@@ -61,10 +65,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
         function_name = f"WorkerFunction-{ticker}"
-        create_or_update_worker_instance(function_name, variables, release_time)
-        created_or_updated.append({"ticker": ticker, "function": function_name})
+        instance_id = create_or_update_worker_instance(function_name, variables)
+        instance_ids.append(instance_id)
 
-    return {"created_or_updated": created_or_updated}
+    poll_and_trigger(instance_ids)
+
+    return instance_ids
 
 def generate_json_for_ticker(ticker: str, today_str: str) -> str:
     historical_table = dynamo.Table(HISTORICAL_TABLE)
@@ -83,7 +89,7 @@ def get_site_config(ticker: str) -> str:
     item = response.get("Item", {})
     return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
-def create_or_update_worker_instance(instance_name: str, variables: Dict[str, Any], release_time: str) -> None:
+def create_or_update_worker_instance(instance_name: str, variables: Dict[str, Any]) -> None:
     env_options = " ".join(f"-e {key}='{value}'" for key, value in variables.items())
     user_data_script = f"""#!/bin/bash
 yum update -y
@@ -92,26 +98,8 @@ service docker start
 usermod -a -G docker ec2-user
 chkconfig docker on
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin {os.environ['AWS_ACCOUNT_ID']}.dkr.ecr.us-east-1.amazonaws.com
-docker pull ${WORKER_IMAGE_URI}
-docker run -d -p 8080:8080 --restart unless-stopped ${env_options} ${WORKER_IMAGE_URI}
-
-# Create a systemd unit to ensure the Docker container is updated on every reboot.
-cat << 'EOF' > /etc/systemd/system/docker-restart.service
-[Unit]
-Description=Restart Docker Container for Worker
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) && \
-    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${os.environ['AWS_ACCOUNT_ID']}.dkr.ecr.us-east-1.amazonaws.com && \
-    /usr/bin/docker pull {WORKER_IMAGE_URI} && \
-    /usr/bin/docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}'
-RemainAfterExit=yes
-
-# Enable the service so it runs on every boot.
-systemctl enable docker-restart.service
+docker pull {WORKER_IMAGE_URI}
+docker run -d -p 8080:8080 --restart unless-stopped {env_options} {WORKER_IMAGE_URI}
 """
     encoded_user_data = base64.b64encode(user_data_script.encode("utf-8")).decode("utf-8")
     response = ec2_client.describe_instances(
@@ -151,16 +139,64 @@ systemctl enable docker-restart.service
             TagSpecifications=[
                 {
                     "ResourceType": "instance",
-                    "Tags": [{"Key": "Name", "Value": instance_name}, {'Key': 'ReleaseTime', "Value": release_time}],
+                    "Tags": [{"Key": "Name", "Value": instance_name}],
                 }
             ],
         )
         instance_id = response["Instances"][0]["InstanceId"]
         print(f"Created EC2 instance {instance_name} with ID {instance_id}.")
-
         waiter = ec2_client.get_waiter('instance_running')
         waiter.wait(InstanceIds=[instance_id])
-        print(f"Instance {instance_id} is running; now stopping it...")
-        ec2_client.stop_instances(InstanceIds=[instance_id])
-        print(f"Instance {instance_id} is now stopped and ready to be started at the scheduled time.")
+        
+        # Poll each instance until it has a public IP, and trigger its /process endpoint asynchronously.
+    return instance_id
 
+def wait_for_endpoint(url, timeout=600, interval=10):
+    """
+    Continuously attempts a GET request on the provided URL until a 200 response is received,
+    or until the timeout (in seconds) is reached.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                return True
+        except Exception as e:
+            # Likely connection error - the instance isn't ready yet.
+            pass
+        time.sleep(interval)
+    return False
+
+def poll_and_trigger(instance_ids):
+    """
+    Continuously polls the given instance IDs until each one has a public IP and its health-check endpoint is ready.
+    Once an instance is ready, spawn a thread to send a POST request to its /process endpoint, then remove it from the list.
+    """
+    remaining = set(instance_ids)
+    while remaining:
+        for instance_id in list(remaining):
+            desc = ec2_client.describe_instances(InstanceIds=[instance_id])
+            public_ip = None
+            for reservation in desc.get("Reservations", []):
+                for inst in reservation.get("Instances", []):
+                    public_ip = inst.get("PublicIpAddress")
+            if public_ip:
+                # Construct the health-check URL (adjust if you have a dedicated health endpoint)
+                health_url = f"http://{public_ip}:8080/health"
+                if wait_for_endpoint(health_url, timeout=60, interval=5):
+                    # Now that the app is healthy, trigger the /process endpoint asynchronously.
+                    url = f"http://{public_ip}:8080/process"
+                    threading.Thread(target=send_post, args=(url, instance_id)).start()
+                    remaining.remove(instance_id)
+                else:
+                    print(f"Instance {instance_id} at {public_ip} not ready yet.")
+        if remaining:
+            time.sleep(5)  # Wait a bit before polling again.
+
+def send_post(url, instance_id):
+    try:
+        response = requests.post(url, json={})
+        print(f"Triggered {url} for instance {instance_id}: {response.status_code}")
+    except Exception as e:
+        print(f"Error triggering {url} for instance {instance_id}: {e}")
