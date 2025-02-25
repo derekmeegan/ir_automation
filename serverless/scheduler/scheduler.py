@@ -51,6 +51,10 @@ def lambda_handler(event, context):
                 if len(tables[0]) < page_size:
                     break
                 offset += page_size
+        except ValueError as e:
+            print(e)
+            if 'tables found' not in str(e):
+                raise
         except Exception as e:
             logger.error(f"Attempt {attempt} failed to fetch data: {e}")
             if attempt == max_retries:
