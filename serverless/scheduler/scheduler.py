@@ -23,8 +23,6 @@ def fetch_html(url: str) -> str:
     return response.text
 
 def lambda_handler(event, context):
-    print(dir(pd))
-    # Determine target date (one week from today)
     today = datetime.utcnow().date()
     target_date = today + timedelta(days=7)
     target_str = target_date.strftime("%Y-%m-%d")
@@ -86,10 +84,13 @@ def lambda_handler(event, context):
     
     # Write to DynamoDB in batches of 25
     for i in range(0, len(items), 25):
-        batch = { table.table_name: items[i:i+25] }
+        batch: dict = {
+            table.table_name: [
+                {'PutRequest': {'Item': item}} for item in items[i:i+25]
+            ]
+        }
         response = dynamodb.meta.client.batch_write_item(RequestItems=batch)
-        # Retry unprocessed items (if any)
-        unprocessed = response.get('UnprocessedItems', {})
+        unprocessed: dict = response.get('UnprocessedItems', {})
         while unprocessed.get(table.table_name):
             logger.warning(f"Retrying {len(unprocessed[table.table_name])} unprocessed items...")
             response = dynamodb.meta.client.batch_write_item(RequestItems=unprocessed)
