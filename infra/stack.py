@@ -11,7 +11,7 @@ from aws_cdk import (
     Stack,
     Duration
 )
-from aws_cdk.aws_lambda_python_alpha import PythonFunction
+from aws_cdk.aws_lambda_python_alpha import PythonFunction, LayerVersion
 from constructs import Construct
 
 
@@ -249,5 +249,38 @@ class MyServerlessStack(Stack):
         after_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
             "release_time": "after"
         })))
+
+        pandas_layer = LayerVersion(
+            self, "PandasLayer",
+            code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer/pandas"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
+            description="Layer with Pandas library"
+        )
+
+        scheduler_function = PythonFunction(
+            self, 
+            "YahooEarningsFunction",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            entry="../serverless/scheduler",
+            index="scheduler.py",
+            handler="lambda_handler",
+            layers=[pandas_layer],
+            timeout=Duration.minutes(3),
+            environment={ "TABLE_NAME": scheduling_table.table_name }
+        )
+        scheduling_table.grant_write_data(scheduler_function)
+
+        schedule_rule = events.Rule(
+            self,
+            "AfterMarketStartRule",
+            schedule=events.Schedule.cron(
+                minute="0",
+                hour="0",
+                month="*",
+                week_day="MON-FRI",
+                year="*"
+            )
+        )
+        schedule_rule.add_target(targets.LambdaFunction(scheduler_function))
 
 

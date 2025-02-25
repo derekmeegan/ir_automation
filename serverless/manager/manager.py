@@ -4,7 +4,6 @@ import json
 import time
 import base64
 import requests
-import threading
 from decimal import Decimal
 from datetime import datetime
 from typing import Any, Dict
