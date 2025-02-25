@@ -11,7 +11,7 @@ from aws_cdk import (
     Stack,
     Duration
 )
-from aws_cdk.aws_lambda_python_alpha import PythonFunction, LayerVersion
+from aws_cdk.aws_lambda_python_alpha import PythonFunction
 from constructs import Construct
 
 
@@ -250,7 +250,7 @@ class MyServerlessStack(Stack):
             "release_time": "after"
         })))
 
-        pandas_layer = LayerVersion(
+        pandas_layer = lambda_.LayerVersion(
             self, "PandasLayer",
             code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer/pandas"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
@@ -259,7 +259,7 @@ class MyServerlessStack(Stack):
 
         scheduler_function = PythonFunction(
             self, 
-            "YahooEarningsFunction",
+            "Scheduler",
             runtime=lambda_.Runtime.PYTHON_3_9,
             entry="../serverless/scheduler",
             index="scheduler.py",
