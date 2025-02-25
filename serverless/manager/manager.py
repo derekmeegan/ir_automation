@@ -187,16 +187,14 @@ def poll_and_trigger(instance_ids):
                 if wait_for_endpoint(health_url, timeout=60*5, interval=5):
                     # Now that the app is healthy, trigger the /process endpoint asynchronously.
                     url = f"http://{public_ip}:8080/process"
-                    threading.Thread(target=send_post, args=(url, instance_id)).start()
+                    try:
+                        # Attempt to make the HTTP request with a short timeout
+                        requests.post(url, timeout=1)
+                    except requests.exceptions.RequestException as e:
+                        # Log request-specific exceptions
+                        print(f"Fire and forget... get that ir info!")
                     remaining.remove(instance_id)
                 else:
                     print(f"Instance {instance_id} at {public_ip} not ready yet.")
         if remaining:
             time.sleep(5)  # Wait a bit before polling again.
-
-def send_post(url, instance_id):
-    try:
-        response = requests.post(url, json={})
-        print(f"Triggered {url} for instance {instance_id}: {response.status_code}")
-    except Exception as e:
-        print(f"Error triggering {url} for instance {instance_id}: {e}")
