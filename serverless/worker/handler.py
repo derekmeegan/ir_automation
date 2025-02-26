@@ -55,6 +55,7 @@ def process() -> Any:
                 break
         except Exception as e:
             print(f'workflow broke with the following error: {e}')
+            raise
     return jsonify('Success')
 
 if __name__ == "__main__":

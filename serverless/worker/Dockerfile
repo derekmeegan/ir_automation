@@ -76,6 +76,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     libpango-1.0-0 \
     libcairo2 \
+    libx11-xcb1 \
+    libxcursor1 \
+    libgtk-3-0 \
+    libpangocairo-1.0-0 \
+    libcairo-gobject2 \
+    libgdk-pixbuf-2.0-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ARG FUNCTION_DIR="/var/task"

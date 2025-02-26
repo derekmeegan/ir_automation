@@ -286,9 +286,9 @@ if __name__ == "__main__":
     # })
 
     os.environ["SITE_CONFIG"] = json.dumps({
-        "ticker": "NTNX",
-        "base_url": "https://ir.nutanix.com/press-releases",
-        "key_phrase": "Nutanix Reports",
+        "ticker": "CRM",
+        "base_url": "https://investor.salesforce.com/financials/default.aspx",
+        "key_phrase": "Q4",
         "llm_instructions": {
         "system": """
             You will receive a body of text containing a company's financial report and historical financial metrics. Your task is to:
@@ -344,22 +344,39 @@ if __name__ == "__main__":
         },
         "refine_link_list": True,
         "selectors": [
-        "a"
+        "a.doc-link"
         ],
-        #  "extraction_method": 'pdf',
+        "extraction_method": 'pdf',
         "url_ignore_list": [
-            "https://ir.nutanix.com/news-releases/news-release-details/nutanix-reports-first-quarter-fiscal-2025-financial-results",
+            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q3/CRM-Q3-FY25-Earnings-Press-Release-w-financials.pdf",
+            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q2/CRM-Q2-FY25-Earnings-Press-Release-w-financials.pdf",
+            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q1/CRM-Q1-FY25-Earnings-Press-Release-w-financials.pdf"
         ],
         "verify_keywords": {
         "fixed_terms": [
-            "reports",
-            "results"
-            "financial",
+           "FY",
+            "earnings",
+            "press",
+            "release"
         ],
-        "quarter_as_string": True,
+        "quarter_with_q": True,
         "requires_quarter": True,
         "requires_year": True
-        }
+        },
+        "href_ignore_words": [
+            "FY24",
+            "FY23",
+            "FY22",
+            "FY21",
+            "FY20",
+            "FY19",
+            "FY18",
+            "FY17",
+            "FY16",
+            "FY15",
+            "FY14",
+            "FY13"
+            ],
     })
 
     result = process()
