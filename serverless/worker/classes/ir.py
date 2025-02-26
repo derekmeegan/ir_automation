@@ -48,6 +48,7 @@ class IRWorkflow:
         self.json_data = config.get('json_data')
         self.llm_instructions = config.get('llm_instructions')
         self.url_ignore_list = config.get('url_ignore_list', [])
+        self.href_ignore_words = config.get('href_ignore_words', [])
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -180,7 +181,6 @@ class IRWorkflow:
                     print(f"Found {len(elements)} elements with selector '{selector}'")
                     for el in elements:
                         text: str = (await el.inner_text()).strip()
-                        print(text)
                         if self.key_phrase in text:
                             candidate_elements.append((el, text))
                 
@@ -222,6 +222,8 @@ class IRWorkflow:
                             if not href or href in self.url_ignore_list:
                                 continue
                             if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
+                                continue
+                            if any(ignore_word in href.lower() for ignore_word in self.href_ignore_words):
                                 continue
                             
                             href_lower = href.lower()
