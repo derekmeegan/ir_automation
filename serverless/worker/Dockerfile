@@ -39,8 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies into the target directory
 RUN pip install --no-cache-dir --target ${FUNCTION_DIR} -r requirements.txt
 
-# Install Playwright and Chromium
+# Install Playwright and Chromium and Firefox
 RUN python -m playwright install chromium
+RUN python -m playwright install firefox
 
 ##############################
 # Final Stage
