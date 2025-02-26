@@ -124,12 +124,17 @@ class IRWorkflow:
             both > quarter only > year only.
         On the final iteration, returns the best candidate found (even with lower priority).
         """
-        for attempt in range(5):
-            print(f"Iteration {attempt+1} of 5")
+        for attempt in range(8):
+            print(f"Iteration {attempt+1} of 8")
             candidate_elements = []
             async with async_playwright() as p:
                 print('launching chromium')
-                browser = await p.chromium.launch(
+                browser = p.chromium
+                if attempt > 1:
+                    print('chromium aint working, switching to firefox')
+                    browser = p.firefox
+
+                browser = await browser.launch(
                     headless=True,
                     args=[
                         "--no-sandbox",
@@ -145,14 +150,21 @@ class IRWorkflow:
                 context = await browser.new_context(
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                               "Chrome/115.0.0.0 Safari/537.36"
+                               "Chrome/121.0.0.0 Safari/537.36",
+                    ignore_https_errors=True
                 )
                 page = await context.new_page()
                 try:
                     await page.goto(self.base_url, wait_until="networkidle", timeout=5000)
-                except TimeoutError:
+                except Exception as e:
+                    print(f"Error during page.goto (networkidle): {e}")
+                    try:
+                        await page.goto(self.base_url, wait_until="domcontentloaded", timeout=10000)
+                    except Exception as inner_e:
+                        print(f"Fallback navigation failed: {inner_e}")
                     print('timeout reached, attempting to pull content thats there')
                     pass
+
                 try:
                     await page.wait_for_selector(self.selectors[0], timeout=5000)
                 except Exception as e:
@@ -160,10 +172,15 @@ class IRWorkflow:
 
                 print('Extracted page content')
                 for selector in self.selectors:
-                    elements = await page.query_selector_all(selector)
+                    elements = []
+                    try:
+                        elements = await page.query_selector_all(selector)
+                    except Exception as e:
+                        print('error reading selectors from page')
                     print(f"Found {len(elements)} elements with selector '{selector}'")
                     for el in elements:
                         text: str = (await el.inner_text()).strip()
+                        print(text)
                         if self.key_phrase in text:
                             candidate_elements.append((el, text))
                 
@@ -214,7 +231,7 @@ class IRWorkflow:
                         candidates.sort(key=lambda x: x[0], reverse=True)
                         best_priority, best_el, best_href = candidates[0]
                         print(f"Best candidate found with priority {best_priority}: {best_href}")
-                        if best_priority > 0 or attempt == 4:
+                        if best_priority > 0:
                             print(f"Returning link: {best_href}")
                             await browser.close()
                             return best_href

@@ -35,7 +35,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     today_str = datetime.utcnow().strftime("%Y-%m-%d")
     table = dynamo.Table(DYNAMO_TABLE)
-    release_time = event.get("release_time")
+    release_time = event.get("release_time", "after")
 
     response = table.query(
         KeyConditionExpression=Key("date").eq(today_str),

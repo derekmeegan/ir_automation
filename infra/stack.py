@@ -225,7 +225,7 @@ class MyServerlessStack(Stack):
             "BeforeMarketStartRule",
             schedule=events.Schedule.cron(
                 minute="50",
-                hour="10",
+                hour="20",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
@@ -240,7 +240,7 @@ class MyServerlessStack(Stack):
             "AfterMarketStartRule",
             schedule=events.Schedule.cron(
                 minute="50",
-                hour="19",
+                hour="20",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
