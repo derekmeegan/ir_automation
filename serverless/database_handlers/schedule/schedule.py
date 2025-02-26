@@ -3,6 +3,7 @@ import os
 import logging
 from typing import Any, Dict, Optional, Union
 import boto3
+import decimal
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -10,6 +11,12 @@ logger.setLevel(logging.INFO)
 dynamodb = boto3.resource("dynamodb")
 TABLE_NAME: str = os.environ.get("SCHEDULE_TABLE")
 table = dynamodb.Table(TABLE_NAME)
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o: Any) -> Any:
+        if isinstance(o, decimal.Decimal):
+            return float(o) if o % 1 else int(o)
+        return super().default(o)
 
 def build_response(status_code: int, body: Optional[Union[dict, list]] = None) -> Dict[str, Any]:
     return {
@@ -19,7 +26,7 @@ def build_response(status_code: int, body: Optional[Union[dict, list]] = None) -
             "Access-Control-Allow-Headers": "Content-Type",
             "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS"
         },
-        "body": json.dumps(body) if body is not None else ""
+        "body": json.dumps(body, cls=DecimalEncoder) if body is not None else ""
     }
 
 def handler(event: dict, context: object) -> dict:
