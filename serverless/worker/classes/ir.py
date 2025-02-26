@@ -279,28 +279,54 @@ class IRWorkflow:
         return text
 
     async def extract_html_text(self, url: str) -> str:
-        """
-        Use Playwright to extract visible text from a web page.
-        """
         if url.startswith('/'):
             url = self.get_base_url(self.base_url) + url
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        for attempt in range(8):
+            print(f"Iteration {attempt+1} of 8")
+            async with async_playwright() as p:
+                browser_type = p.chromium if attempt <= 1 else p.firefox
+                if attempt <= 1:
+                    print("launching chromium")
+                else:
+                    print("chromium ain't working, switching to firefox")
+                browser = await browser_type.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-gpu",
+                        "--single-process",
+                        "--disable-dev-shm-usage",
+                        "--disable-software-rasterizer",
+                        "--disable-setuid-sandbox",
+                        "--disable-features=SitePerProcess",
+                        "--headless=new"
+                    ]
+                )
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) "
                             "Chrome/115.0.0.0 Safari/537.36",
-                ignore_https_errors=True
-            )
-            page = await context.new_page()
-            try:
-                await page.goto(url, wait_until="networkidle", timeout=10000)
-            except TimeoutError:
-                print('timeout reached, attempting to pull content thats there')
-                pass
-            content = await page.inner_text(self.page_content_selector, timeout=10000)
-            await browser.close()
-            return content
+                    ignore_https_errors=True
+                )
+                page = await context.new_page()
+                try:
+                    await page.goto(url, wait_until="networkidle", timeout=10000)
+                except Exception as e:
+                    print(f"Error during page.goto (networkidle): {e}")
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded", timeout=10000)
+                    except Exception as inner_e:
+                        print(f"Fallback navigation failed: {inner_e}")
+                    print("timeout reached, attempting to pull content that's there")
+                try:
+                    content: str = await page.inner_text(self.page_content_selector, timeout=10000)
+                    await browser.close()
+                    return content
+                except Exception as e:
+                    print(f"Error extracting content: {e}")
+                    await browser.close()
+        return ""
+
 
     async def poll_for_earnings_link(self) -> str:
         """

@@ -392,5 +392,3 @@ class MyServerlessStack(Stack):
             )]
         )
         company_usage_plan.add_api_key(company_api_key)
-
-
