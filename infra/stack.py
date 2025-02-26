@@ -302,7 +302,6 @@ class MyServerlessStack(Stack):
         config_handler = PythonFunction(
             self, "ConfigHandler",
             runtime=lambda_.Runtime.PYTHON_3_9,
-            handler="company_lambda.handler",
             entry="../serverless/database_handlers/config",
             index="config.py",
             handler="handler",
@@ -322,10 +321,22 @@ class MyServerlessStack(Stack):
             )
         )
         earnings_resource = earnings_api.root.add_resource("earnings")
-        earnings_resource.add_method("GET")
-        earnings_resource.add_method("POST")
-        earnings_resource.add_method("PUT")
-        earnings_resource.add_method("OPTIONS")
+        earnings_resource.add_method("GET", api_key_required=True)
+        earnings_resource.add_method("POST", api_key_required=True)
+        earnings_resource.add_method("PUT", api_key_required=True)
+        earnings_resource.add_method("OPTIONS", api_key_required=True)
+
+        earnings_api_key = earnings_api.add_api_key("EarningsApiKey", api_key_name="EarningsApiKey")
+        earnings_usage_plan = earnings_api.add_usage_plan(
+            "EarningsUsagePlan",
+            name="EarningsUsagePlan",
+            throttle=apigateway.ThrottleSettings(rate_limit=10, burst_limit=2),
+            api_stages=[apigateway.UsagePlanPerApiStage(
+                api=earnings_api,
+                stage=earnings_api.deployment_stage
+            )]
+        )
+        earnings_usage_plan.add_api_key(earnings_api_key)
 
         # Historical API Gateway
         historical_api = apigateway.LambdaRestApi(
@@ -338,12 +349,24 @@ class MyServerlessStack(Stack):
             )
         )
         historical_resource = historical_api.root.add_resource("historical")
-        historical_resource.add_method("GET")
-        historical_resource.add_method("POST")
+        historical_resource.add_method("GET", api_key_required=True)
+        historical_resource.add_method("POST", api_key_required=True)
+        historical_resource.add_method("OPTIONS", api_key_required=True)
         # Endpoint for specific ticker/date: /historical/{ticker}/{date}
         ticker_resource = historical_resource.add_resource("{ticker}")
-        ticker_resource.add_resource("{date}").add_method("GET")
-        historical_resource.add_method("OPTIONS")
+        ticker_resource.add_resource("{date}").add_method("GET", api_key_required=True)
+
+        historical_api_key = historical_api.add_api_key("HistoricalApiKey", api_key_name="HistoricalApiKey")
+        historical_usage_plan = historical_api.add_usage_plan(
+            "HistoricalUsagePlan",
+            name="HistoricalUsagePlan",
+            throttle=apigateway.ThrottleSettings(rate_limit=10, burst_limit=2),
+            api_stages=[apigateway.UsagePlanPerApiStage(
+                api=historical_api,
+                stage=historical_api.deployment_stage
+            )]
+        )
+        historical_usage_plan.add_api_key(historical_api_key)
 
         # Company Config API Gateway
         company_api = apigateway.LambdaRestApi(
@@ -356,9 +379,21 @@ class MyServerlessStack(Stack):
             )
         )
         configs_resource = company_api.root.add_resource("configs")
-        configs_resource.add_method("GET")
-        configs_resource.add_method("POST")
-        configs_resource.add_method("OPTIONS")
-        configs_resource.add_resource("{ticker}").add_method("GET")
+        configs_resource.add_method("GET", api_key_required=True)
+        configs_resource.add_method("POST", api_key_required=True)
+        configs_resource.add_method("OPTIONS", api_key_required=True)
+        configs_resource.add_resource("{ticker}").add_method("GET", api_key_required=True)
+
+        company_api_key = company_api.add_api_key("CompanyApiKey", api_key_name="CompanyApiKey")
+        company_usage_plan = company_api.add_usage_plan(
+            "CompanyUsagePlan",
+            name="CompanyUsagePlan",
+            throttle=apigateway.ThrottleSettings(rate_limit=10, burst_limit=2),
+            api_stages=[apigateway.UsagePlanPerApiStage(
+                api=company_api,
+                stage=company_api.deployment_stage
+            )]
+        )
+        company_usage_plan.add_api_key(company_api_key)
 
 
