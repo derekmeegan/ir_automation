@@ -7,6 +7,7 @@ from aws_cdk import (
     aws_events as events,
     aws_events_targets as targets,
     aws_ecr_assets as ecr_assets,
+    aws_apigateway as apigateway,
     RemovalPolicy,
     Stack,
     Duration
@@ -225,7 +226,7 @@ class MyServerlessStack(Stack):
             "BeforeMarketStartRule",
             schedule=events.Schedule.cron(
                 minute="50",
-                hour="20",
+                hour="10",
                 month="*",
                 week_day="MON-FRI",
                 year="*"
@@ -249,13 +250,6 @@ class MyServerlessStack(Stack):
         after_market_rule.add_target(targets.LambdaFunction(manager_function, event=events.RuleTargetInput.from_object({
             "release_time": "after"
         })))
-
-        # pandas_layer = lambda_.LayerVersion(
-        #     self, "PandasLayer",
-        #     code=lambda_.Code.from_asset("../serverless/scheduler/lambda_layer"),
-        #     compatible_runtimes=[lambda_.Runtime.PYTHON_3_9],
-        #     description="Layer with Pandas library"
-        # )
 
         scheduler_function = PythonFunction(
             self, 
@@ -282,5 +276,89 @@ class MyServerlessStack(Stack):
             )
         )
         schedule_rule.add_target(targets.LambdaFunction(scheduler_function))
+
+        schedule_handler = PythonFunction(
+            self, "ScheduleHandler",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            entry="../serverless/database_handlers/schedule",
+            index="schedule.py",
+            handler="handler",
+            environment={"SCHEDULE_TABLE": scheduling_table.table_name}
+        )
+        scheduling_table.grant_read_data(schedule_handler)
+        scheduling_table.grant_write_data(schedule_handler)
+
+        history_handler = PythonFunction(
+            self, "HistoryHandler",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            entry="../serverless/database_handlers/history",
+            index="history.py",
+            handler="handler",
+            environment={"HISTORY_TABLE": historical_table.table_name}
+        )
+        historical_table.grant_read_data(history_handler)
+        historical_table.grant_write_data(history_handler)
+
+        config_handler = PythonFunction(
+            self, "ConfigHandler",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            handler="company_lambda.handler",
+            entry="../serverless/database_handlers/config",
+            index="config.py",
+            handler="handler",
+            environment={"CONFIG_TABLE": config_table.table_name}
+        )
+        config_table.grant_read_data(config_handler)
+        config_table.grant_write_data(config_handler)
+
+        # Earnings API Gateway
+        earnings_api = apigateway.LambdaRestApi(
+            self, "EarningsAPI",
+            handler=schedule_handler,
+            proxy=False,
+            default_cors_preflight_options=apigateway.CorsOptions(
+                allow_origins=apigateway.Cors.ALL_ORIGINS,
+                allow_methods=apigateway.Cors.ALL_METHODS,
+            )
+        )
+        earnings_resource = earnings_api.root.add_resource("earnings")
+        earnings_resource.add_method("GET")
+        earnings_resource.add_method("POST")
+        earnings_resource.add_method("PUT")
+        earnings_resource.add_method("OPTIONS")
+
+        # Historical API Gateway
+        historical_api = apigateway.LambdaRestApi(
+            self, "HistoricalAPI",
+            handler=history_handler,
+            proxy=False,
+            default_cors_preflight_options=apigateway.CorsOptions(
+                allow_origins=apigateway.Cors.ALL_ORIGINS,
+                allow_methods=apigateway.Cors.ALL_METHODS,
+            )
+        )
+        historical_resource = historical_api.root.add_resource("historical")
+        historical_resource.add_method("GET")
+        historical_resource.add_method("POST")
+        # Endpoint for specific ticker/date: /historical/{ticker}/{date}
+        ticker_resource = historical_resource.add_resource("{ticker}")
+        ticker_resource.add_resource("{date}").add_method("GET")
+        historical_resource.add_method("OPTIONS")
+
+        # Company Config API Gateway
+        company_api = apigateway.LambdaRestApi(
+            self, "CompanyAPI",
+            handler=config_handler,
+            proxy=False,
+            default_cors_preflight_options=apigateway.CorsOptions(
+                allow_origins=apigateway.Cors.ALL_ORIGINS,
+                allow_methods=apigateway.Cors.ALL_METHODS,
+            )
+        )
+        configs_resource = company_api.root.add_resource("configs")
+        configs_resource.add_method("GET")
+        configs_resource.add_method("POST")
+        configs_resource.add_method("OPTIONS")
+        configs_resource.add_resource("{ticker}").add_method("GET")
 
 
