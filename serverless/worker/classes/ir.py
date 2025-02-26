@@ -223,7 +223,7 @@ class IRWorkflow:
                                 continue
                             if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
                                 continue
-                            if any(ignore_word in href.lower() for ignore_word in self.href_ignore_words):
+                            if any(ignore_word.lower() in href.lower() for ignore_word in self.href_ignore_words):
                                 continue
                             
                             href_lower = href.lower()
