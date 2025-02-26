@@ -401,9 +401,22 @@ class IRWorkflow:
 
         # Analyze forward guidance
         guidance = reported['forward_guidance']
+
+        revenue_billion_range = guidance['revenue_billion_range']
+        if revenue_billion_range is None:
+            revenue_billion_range = [None, None]
+
         forward_revenue_msg = f"Forward Revenue: ${guidance['revenue_billion_range'][0]}B - ${guidance['revenue_billion_range'][1]}B vs ${hist['next_quarter_sales_estimate_millions']/1000:.2f}B"
-        forward_gross_margin_msg = f"Forward Non-GAAP Gross Margin: {guidance['non_gaap_gross_margin_range'][0]}% - {guidance['non_gaap_gross_margin_range'][1]}%"
-        forward_operating_margin_msg = f"Forward Non-GAAP Gross Margin: {guidance['non_gaap_operating_margin_range'][0]}% - {guidance['non_gaap_operating_margin_range'][1]}%"
+
+        non_gaap_gross_margin_range = guidance['non_gaap_gross_margin_range']
+        if non_gaap_gross_margin_range is None:
+            non_gaap_gross_margin_range = [None, None]
+        forward_gross_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_gross_margin_range[0]}% - {non_gaap_gross_margin_range[1]}%"
+
+        non_gaap_operating_margin_range = guidance['non_gaap_operating_margin_range']
+        if non_gaap_operating_margin_range is None:
+            non_gaap_operating_margin_range = [None, None]
+        forward_operating_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_operating_margin_range[0]}% - {non_gaap_operating_margin_range[1]}%"
 
         # Analyze sentiment snippets
         sentiment_msgs = "\n".join([f"- {s['snippet']} {classification_map.get(s['classification'].lower(), '🟡')}" for s in extracted_data['sentiment_snippets']])
