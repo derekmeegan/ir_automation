@@ -324,7 +324,6 @@ class MyServerlessStack(Stack):
         earnings_resource.add_method("GET", api_key_required=True)
         earnings_resource.add_method("POST", api_key_required=True)
         earnings_resource.add_method("PUT", api_key_required=True)
-        earnings_resource.add_method("OPTIONS", api_key_required=True)
 
         earnings_api_key = earnings_api.add_api_key("EarningsApiKey", api_key_name="EarningsApiKey")
         earnings_usage_plan = earnings_api.add_usage_plan(
@@ -351,7 +350,6 @@ class MyServerlessStack(Stack):
         historical_resource = historical_api.root.add_resource("historical")
         historical_resource.add_method("GET", api_key_required=True)
         historical_resource.add_method("POST", api_key_required=True)
-        historical_resource.add_method("OPTIONS", api_key_required=True)
         # Endpoint for specific ticker/date: /historical/{ticker}/{date}
         ticker_resource = historical_resource.add_resource("{ticker}")
         ticker_resource.add_resource("{date}").add_method("GET", api_key_required=True)
@@ -381,7 +379,6 @@ class MyServerlessStack(Stack):
         configs_resource = company_api.root.add_resource("configs")
         configs_resource.add_method("GET", api_key_required=True)
         configs_resource.add_method("POST", api_key_required=True)
-        configs_resource.add_method("OPTIONS", api_key_required=True)
         configs_resource.add_resource("{ticker}").add_method("GET", api_key_required=True)
 
         company_api_key = company_api.add_api_key("CompanyApiKey", api_key_name="CompanyApiKey")
