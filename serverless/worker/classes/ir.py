@@ -406,16 +406,27 @@ class IRWorkflow:
         if revenue_billion_range is None:
             revenue_billion_range = [None, None]
 
+        if len(revenue_billion_range) == 1:
+            revenue_billion_range = [revenue_billion_range[0], revenue_billion_range[0]]
+
         forward_revenue_msg = f"Forward Revenue: ${guidance['revenue_billion_range'][0]}B - ${guidance['revenue_billion_range'][1]}B vs ${hist['next_quarter_sales_estimate_millions']/1000:.2f}B"
 
         non_gaap_gross_margin_range = guidance['non_gaap_gross_margin_range']
         if non_gaap_gross_margin_range is None:
             non_gaap_gross_margin_range = [None, None]
+
+        if len(non_gaap_gross_margin_range) == 1:
+            non_gaap_gross_margin_range = [non_gaap_gross_margin_range[0], non_gaap_gross_margin_range[0]]
+
         forward_gross_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_gross_margin_range[0]}% - {non_gaap_gross_margin_range[1]}%"
 
         non_gaap_operating_margin_range = guidance['non_gaap_operating_margin_range']
         if non_gaap_operating_margin_range is None:
             non_gaap_operating_margin_range = [None, None]
+
+        if len(non_gaap_operating_margin_range) == 1:
+            non_gaap_operating_margin_range = [non_gaap_operating_margin_range[0], non_gaap_operating_margin_range[0]]
+
         forward_operating_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_operating_margin_range[0]}% - {non_gaap_operating_margin_range[1]}%"
 
         # Analyze sentiment snippets
