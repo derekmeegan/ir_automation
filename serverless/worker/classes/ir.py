@@ -422,7 +422,7 @@ class IRWorkflow:
         current: Dict[str, Any] = metrics.get("current_quarter", {})
         for key, actual in current.items():
             hist_val: Optional[float] = hist.get(f"current_{key}")
-            comp: str = compare(actual, hist_val) if hist_val is not None else ""
+            comp: str = compare(actual, hist_val)
             messages.append(f"{key.replace('billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
 
         messages.append('\n')
@@ -431,7 +431,7 @@ class IRWorkflow:
         full_year: Dict[str, Any] = metrics.get("full_year", {})
         for key, actual in full_year.items():
             hist_val: Optional[float] = hist.get(f"full_year_{key}")
-            comp: str = compare(actual, hist_val) if hist_val is not None else ""
+            comp: str = compare(actual, hist_val)
             messages.append(f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
 
         # Process forward guidance metrics
