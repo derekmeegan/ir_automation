@@ -16,6 +16,7 @@ HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
 GROQ_API_SECRET_ARN = os.environ["GROQ_API_SECRET_ARN"]
 DISCORD_WEBHOOK_SECRET_ARN = os.environ["DISCORD_WEBHOOK_SECRET_ARN"]
+ARTIFACT_BUCKET = os.environ["ARTIFACT_BUCKET"]
 
 dynamo = boto3.resource("dynamodb")
 lambda_client = boto3.client("lambda")
@@ -33,9 +34,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
       3) Creates/updates an EventBridge rule to ping that worker function 
          between ~5:55AM–9:30AM ET or 3:55PM–6:30PM ET, depending on release_time.
     """
-    today_str = datetime.utcnow().strftime("%Y-%m-%d")
-    table = dynamo.Table(DYNAMO_TABLE)
+    today_str = event.get('today_str', datetime.utcnow().strftime("%Y-%m-%d"))
     release_time = event.get("release_time", "after")
+    table = dynamo.Table(DYNAMO_TABLE)
 
     response = table.query(
         KeyConditionExpression=Key("date").eq(today_str),
@@ -60,7 +61,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "JSON_DATA": json_data,
             "SITE_CONFIG": site_config,
             "GROQ_API_SECRET_ARN": GROQ_API_SECRET_ARN,
-            "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN
+            "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN,
+            "ARTIFACT_BUCKET": ARTIFACT_BUCKET
         }
 
         function_name = f"WorkerFunction-{ticker}"

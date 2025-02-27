@@ -29,6 +29,7 @@ def process() -> Any:
     os.environ["DEFAULT_STEALTH"] = 'true'
     os.environ["DEFAULT_IGNORE_HTTPS_ERRORS"] = 'true'
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "")
+    
     config = {
         "quarter": os.environ.get("QUARTER", ""),
         "year": os.environ.get("YEAR", ""),
@@ -38,6 +39,7 @@ def process() -> Any:
         "groq_api_key": os.environ.get("GROQ_API_KEY", ""),
         "discord_webhook_arn": os.environ.get("DISCORD_WEBHOOK_SECRET_ARN", ""),
         "discord_webhook_url": os.environ.get("DISCORD_WEBHOOK_URL", ""),
+        "s3_artifact_bucket": os.environ.get('ARTIFACT_BUCKET', ''),
         **json.loads(os.environ.get("SITE_CONFIG", "{}"))
     }
 

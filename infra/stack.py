@@ -13,6 +13,7 @@ from aws_cdk import (
     Duration
 )
 from aws_cdk.aws_lambda_python_alpha import PythonFunction
+from aws_cdk.aws_s3 import Bucket
 from constructs import Construct
 
 
@@ -64,6 +65,13 @@ class MyServerlessStack(Stack):
 
         groq_api_secret.grant_read(worker_lambda_execution_role)
         discord_webhook_url.grant_read(worker_lambda_execution_role)
+
+        artifact_bucket: Bucket = Bucket(
+            self,
+            "ArtifactBucket",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True
+        )
 
         scheduling_table = dynamodb.Table(
             self,
@@ -144,6 +152,7 @@ class MyServerlessStack(Stack):
                 "INSTANCE_PROFILE": instance_profile.ref,
                 "SUBNET_ID": vpc.public_subnets[0].subnet_id,
                 "INSTANCE_SECURITY_GROUP": instance_sg.security_group_id,
+                "ARTIFACT_BUCKET": artifact_bucket.bucket_name,
             },
         )
 

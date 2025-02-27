@@ -49,6 +49,8 @@ class IRWorkflow:
         self.llm_instructions = config.get('llm_instructions')
         self.url_ignore_list = config.get('url_ignore_list', [])
         self.href_ignore_words = config.get('href_ignore_words', [])
+        self.original_config: Dict[str, Any] = config.copy()
+        self.s3_artifact_bucket = config.get("s3_artifact_bucket")
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -375,6 +377,12 @@ class IRWorkflow:
         print(discord_message)
         print('punting discord message')
         self.punt_message_to_discord(discord_message)
+        self.store_artifacts(
+            scraped_url=link,
+            scraped_content=content,
+            groq_response=metrics,
+            discord_message=discord_message
+        )
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         hist = json.loads(self.json_data)
@@ -490,3 +498,36 @@ class IRWorkflow:
                     return {"error": "Failed to parse metrics from GPT response after retries"}
                 await asyncio.sleep(delay)
                 delay *= 2
+
+    def store_artifacts(
+        self,
+        scraped_url: str,
+        scraped_content: str,
+        groq_response: Dict[str, Any],
+        discord_message: str
+    ) -> None:
+        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name: str = f"{self.ticker}_{timestamp}.json"
+        stored_config: Dict[str, Any] = self.original_config.copy()
+        if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
+            try:
+                stored_config["llm_instructions"]["system"] = base64.b64decode(
+                    stored_config["llm_instructions"]["system"]
+                ).decode("utf-8")
+            except Exception:
+                pass
+
+        artifact: Dict[str, Any] = {
+            "ticker": self.ticker,
+            "timestamp": timestamp,
+            "scraped_url": scraped_url,
+            "scraped_content": scraped_content,
+            "groq_response": groq_response,
+            "discord_message": discord_message,
+            "config": stored_config
+        }
+        artifact_json: str = json.dumps(artifact)
+        s3_bucket = self.s3_artifact_bucket
+        s3_client = boto3.client("s3")
+        s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
+        print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")
