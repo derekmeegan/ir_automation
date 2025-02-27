@@ -460,7 +460,7 @@ class IRWorkflow:
 
         prompt = self.llm_instructions.get('system')
         if self.deployment_type != 'local':
-            prompt = base64.b6decode(prompt).decode("utf-8")
+            prompt = base64.b64decode(prompt).decode("utf-8")
 
         for attempt in range(max_attempts):
             try:
