@@ -372,6 +372,7 @@ class IRWorkflow:
         # Call LLM function asynchronously. Here we assume a separate async function for groq.
         metrics = await self.extract_financial_metrics(content)
         discord_message = self.analyze_financial_metrics(metrics)
+        print(discord_message)
         print('punting discord message')
         self.punt_message_to_discord(discord_message)
 
@@ -457,6 +458,10 @@ class IRWorkflow:
         max_attempts: int = 3
         delay: float = 1.0
 
+        prompt = self.llm_instructions.get('system')
+        if self.deployment_type != 'local':
+            prompt = base64.b6decode(prompt).decode("utf-8")
+
         for attempt in range(max_attempts):
             try:
                 client = Groq(api_key=self.groq_api_key)
@@ -465,7 +470,7 @@ class IRWorkflow:
                     messages=[
                         {
                             "role": "system",
-                            "content": base64.b64decode(self.llm_instructions.get('system')).decode("utf-8")
+                            "content": prompt
                         },
                         {
                             "role": "user",
