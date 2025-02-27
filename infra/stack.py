@@ -125,6 +125,7 @@ class MyServerlessStack(Stack):
 
         groq_api_secret.grant_read(ec2_instance_role)
         discord_webhook_url.grant_read(ec2_instance_role)
+        artifact_bucket.grant_put(ec2_instance_role)
 
         instance_profile = iam.CfnInstanceProfile(
             self,
