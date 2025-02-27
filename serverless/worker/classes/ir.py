@@ -6,7 +6,7 @@ import base64
 import asyncio
 import PyPDF2
 import requests
-from groq import Groq
+from groq import Groq, BadRequestError
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import Any, Callable, Dict, Optional
@@ -452,31 +452,36 @@ class IRWorkflow:
         """
         Sends the PDF text to a GPT-like service and returns a dictionary
         with extracted financial metrics such as EPS, net sales, and operating income.
+        Retries the API call on JSON decode or BadRequest errors.
         """
-        client = Groq(api_key=self.groq_api_key)
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": base64.b64decode(self.llm_instructions.get('system')).decode("utf-8")
-                },
-                {
-                    "role": "user",
-                    "content": pdf_text
-                }
-            ],
-            temperature=int(float(self.llm_instructions.get('temperature'))),
-            response_format={"type": "json_object"}
-        )
-        
-        # Extract the model’s message content as text
-        content = response.choices[0].message.content
-        
-        # Attempt to parse JSON from the content
-        try:
-            metrics = json.loads(content)
-        except json.JSONDecodeError:
-            metrics = {"error": "Failed to parse metrics from GPT response"}
-        
-        return metrics
+        max_attempts: int = 3
+        delay: float = 1.0
+
+        for attempt in range(max_attempts):
+            try:
+                client = Groq(api_key=self.groq_api_key)
+                response = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": base64.b64decode(self.llm_instructions.get('system')).decode("utf-8")
+                        },
+                        {
+                            "role": "user",
+                            "content": pdf_text
+                        }
+                    ],
+                    temperature=int(float(self.llm_instructions.get('temperature'))),
+                    response_format={"type": "json_object"}
+                )
+
+                content: str = response.choices[0].message.content
+                metrics: Dict[str, Any] = json.loads(content)
+                return metrics
+
+            except (json.JSONDecodeError, BadRequestError):
+                if attempt == max_attempts - 1:
+                    return {"error": "Failed to parse metrics from GPT response after retries"}
+                await asyncio.sleep(delay)
+                delay *= 2
