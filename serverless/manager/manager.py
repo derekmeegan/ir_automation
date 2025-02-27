@@ -14,6 +14,7 @@ WORKER_IMAGE_URI = os.environ["WORKER_IMAGE_URI"]
 WORKER_EXECUTION_ROLE = os.environ["WORKER_EXECUTION_ROLE"]
 HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
+MESSAGES_TABLE = os.environ["MESSAGES_TABLE"]
 GROQ_API_SECRET_ARN = os.environ["GROQ_API_SECRET_ARN"]
 DISCORD_WEBHOOK_SECRET_ARN = os.environ["DISCORD_WEBHOOK_SECRET_ARN"]
 ARTIFACT_BUCKET = os.environ["ARTIFACT_BUCKET"]
@@ -62,7 +63,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "SITE_CONFIG": site_config,
             "GROQ_API_SECRET_ARN": GROQ_API_SECRET_ARN,
             "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN,
-            "ARTIFACT_BUCKET": ARTIFACT_BUCKET
+            "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
+            "MESSAGES_TABLE": MESSAGES_TABLE
         }
 
         function_name = f"WorkerFunction-{ticker}"

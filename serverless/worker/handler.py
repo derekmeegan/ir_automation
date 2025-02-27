@@ -40,6 +40,7 @@ def process() -> Any:
         "discord_webhook_arn": os.environ.get("DISCORD_WEBHOOK_SECRET_ARN", ""),
         "discord_webhook_url": os.environ.get("DISCORD_WEBHOOK_URL", ""),
         "s3_artifact_bucket": os.environ.get('ARTIFACT_BUCKET', ''),
+        "messages_table": os.environ.get('MESSAGES_TABLE', ''),
         **json.loads(os.environ.get("SITE_CONFIG", "{}"))
     }
 

@@ -1,4 +1,5 @@
 import io
+import uuid
 import json
 import boto3
 import base64
@@ -52,6 +53,7 @@ class IRWorkflow:
         self.s3_artifact_bucket = config.get("s3_artifact_bucket")
         self.browser = (config.get('browser_type') or 'chromium').lower()
         self.past_browser = None
+        self.messages_table = config.get('messages_table')
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -74,6 +76,31 @@ class IRWorkflow:
                 return secret_dict.get("GROQ_API_KEY")
             else:
                 raise ValueError("Missing GROQ_API_SECRET_ARN environment variable")
+
+    def store_message_to_dynamo(self, message: str) -> None:
+        """
+        Write the discord message to a DynamoDB table specified by self.messages_table.
+        """
+        timestamp: str = datetime.now().isoformat()
+        message_id: str = str(uuid.uuid4())
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.Table(self.messages_table)
+        
+        try:
+            table.put_item(
+                Item={
+                    "message_id": message_id,
+                    "ticker": self.ticker,
+                    "quarter": self.quarter,
+                    "year": self.year,
+                    "timestamp": timestamp,
+                    "discord_message": message
+                }
+            )
+            print(f"Stored discord message with id {message_id} in table.")
+        except Exception as e:
+            print(f"Error storing discord message to DynamoDB: {e}")
 
     def get_base_url(self, url: str) -> str:
         parsed_url = urlparse(url)
@@ -393,15 +420,16 @@ class IRWorkflow:
         if not content:
             raise Exception('Content was not able to be scraped')
         metrics = await self.extract_financial_metrics(content)
-        discord_message = self.analyze_financial_metrics(metrics)
+        message = self.analyze_financial_metrics(metrics)
         print('punting discord message')
-        self.punt_message_to_discord(discord_message)
+        self.punt_message_to_discord(message)
         self.store_artifacts(
             scraped_url=link,
             scraped_content=content,
             groq_response=metrics,
-            discord_message=discord_message
+            discord_message=message
         )
+        self.store_message_to_dynamo(message)
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         hist: Dict[str, Any] = json.loads(self.json_data)

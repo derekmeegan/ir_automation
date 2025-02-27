@@ -80,7 +80,6 @@ class MyServerlessStack(Stack):
             sort_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
             removal_policy=RemovalPolicy.DESTROY
         )
-
         historical_table = dynamodb.Table(
             self,
             "HistoricalTable",
@@ -93,11 +92,16 @@ class MyServerlessStack(Stack):
             partition_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
             sort_key=dynamodb.Attribute(name="date", type=dynamodb.AttributeType.STRING)
         )
-
         config_table = dynamodb.Table(
             self,
             "ConfigTable",
             partition_key=dynamodb.Attribute(name="ticker", type=dynamodb.AttributeType.STRING),
+            removal_policy=RemovalPolicy.DESTROY
+        )
+        messages_table = dynamodb.Table(
+            self,
+            "MessagesTable",
+            partition_key=dynamodb.Attribute(name="message_id", type=dynamodb.AttributeType.STRING),
             removal_policy=RemovalPolicy.DESTROY
         )
 
@@ -126,6 +130,7 @@ class MyServerlessStack(Stack):
         groq_api_secret.grant_read(ec2_instance_role)
         discord_webhook_url.grant_read(ec2_instance_role)
         artifact_bucket.grant_put(ec2_instance_role)
+        messages_table.grant_write(ec2_instance_role)
 
         instance_profile = iam.CfnInstanceProfile(
             self,
@@ -147,6 +152,7 @@ class MyServerlessStack(Stack):
                 "WORKER_EXECUTION_ROLE": worker_lambda_execution_role.role_arn,
                 "HISTORICAL_TABLE": historical_table.table_name,
                 "CONFIG_TABLE": config_table.table_name,
+                "MESSAGES_TABLE": messages_table.table_name,
                 "AWS_ACCOUNT_ID": self.account,
                 "GROQ_API_SECRET_ARN": groq_api_secret.secret_arn, 
                 "DISCORD_WEBHOOK_SECRET_ARN": discord_webhook_url.secret_arn,
@@ -320,6 +326,20 @@ class MyServerlessStack(Stack):
         config_table.grant_read_data(config_handler)
         config_table.grant_write_data(config_handler)
 
+        message_handler = PythonFunction(
+            self,
+            "MessageHandler",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            entry="../serverless/database_handlers/messages",  # Folder containing handler.py
+            index="messages.py",
+            handler="handler",
+            environment={
+                "MESSAGES_TABLE": messages_table.table_name,
+            },
+        )
+        messages_table.grant_read_data(message_handler)
+        messages_table.grant_write_data(message_handler)
+
         # Earnings API Gateway
         earnings_api = apigateway.LambdaRestApi(
             self, "EarningsAPI",
@@ -360,7 +380,6 @@ class MyServerlessStack(Stack):
         historical_resource = historical_api.root.add_resource("historical")
         historical_resource.add_method("GET", api_key_required=True)
         historical_resource.add_method("POST", api_key_required=True)
-        # Endpoint for specific ticker/date: /historical/{ticker}/{date}
         ticker_resource = historical_resource.add_resource("{ticker}")
         ticker_resource.add_resource("{date}").add_method("GET", api_key_required=True)
 
@@ -376,7 +395,6 @@ class MyServerlessStack(Stack):
         )
         historical_usage_plan.add_api_key(historical_api_key)
 
-        # Company Config API Gateway
         company_api = apigateway.LambdaRestApi(
             self, "CompanyAPI",
             handler=config_handler,
@@ -402,3 +420,41 @@ class MyServerlessStack(Stack):
             )]
         )
         company_usage_plan.add_api_key(company_api_key)
+
+        # API Gateway with CORS and API Key configuration
+        messages_api: apigateway.LambdaRestApi = apigateway.LambdaRestApi(
+            self,
+            "MessagesAPI",
+            handler=message_handler,
+            proxy=False,
+            default_cors_preflight_options=apigateway.CorsOptions(
+                allow_origins=apigateway.Cors.ALL_ORIGINS,
+                allow_methods=apigateway.Cors.ALL_METHODS,
+            ),
+        )
+
+        messages_resource = messages_api.root.add_resource("messages")
+        messages_resource.add_method("GET", api_key_required=True)
+        messages_resource.add_method("POST", api_key_required=True)
+
+        message_by_id = messages_resource.add_resource("{id}")
+        message_by_id.add_method("GET", api_key_required=True)
+        message_by_id.add_method("DELETE", api_key_required=True)
+
+        read_resource = message_by_id.add_resource("read")
+        read_resource.add_method("PATCH", api_key_required=True)
+
+        messages_api_key = messages_api.add_api_key(
+            "MessagesApiKey", api_key_name="MessagesApiKey"
+        )
+        messages_usage_plan = messages_api.add_usage_plan(
+            "MessagesUsagePlan",
+            name="MessagesUsagePlan",
+            throttle=apigateway.ThrottleSettings(rate_limit=10, burst_limit=2),
+            api_stages=[
+                apigateway.UsagePlanPerApiStage(
+                    api=messages_api, stage=messages_api.deployment_stage
+                )
+            ],
+        )
+        messages_usage_plan.add_api_key(messages_api_key)
