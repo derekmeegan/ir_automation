@@ -447,7 +447,7 @@ class IRWorkflow:
             f"{sentiment_msgs}"
         )
 
-        return final_message
+        return final_message[:2000]
 
     async def extract_financial_metrics(self, pdf_text: str) -> Dict[str, Any]:
         """
