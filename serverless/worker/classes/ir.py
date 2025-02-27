@@ -1,4 +1,3 @@
-import os
 import io
 import json
 import boto3
@@ -9,8 +8,8 @@ import requests
 from groq import Groq, BadRequestError
 from datetime import datetime
 from urllib.parse import urlparse
-from typing import Any, Callable, Dict, Optional
-from playwright.async_api import async_playwright, TimeoutError
+from typing import Any, Dict, List, Optional
+from playwright.async_api import async_playwright
 
 class IRWorkflow:
     def __init__(self, config: Dict[str, Any]):
@@ -21,7 +20,7 @@ class IRWorkflow:
             - selectors: List[str] for fallback scraping
             - verify_keywords: Dict[str, Any] for quarter/year verification (e.g., {"quarter": "Q3", "year": "24"})
             - extraction_method: 'pdf' or 'html'
-            - custom_pdf_edit: Optional[Callable[[str], str]]
+            - custom_pdf_edit: Optional[[[str], str]]
             - llm_instructions: Dict[str, Any] (e.g., system prompt, temperature)
             - polling_config: Dict[str, Any] with poll interval settings
         """
@@ -32,7 +31,7 @@ class IRWorkflow:
         self.verify_keywords = config.get("verify_keywords", {})
         self.url_keywords = config.get("url_keywords", {})
         self.extraction_method: str = config.get("extraction_method", None)
-        self.custom_pdf_edit: Optional[Callable[[str], str]] = config.get("custom_pdf_edit")
+        self.custom_pdf_edit = config.get("custom_pdf_edit")
         self.llm_instructions: Dict[str, Any] = config.get("llm_instructions", {})
         self.polling_config: Dict[str, Any] = config.get("polling_config", {"interval": 60})
         self.refine_link_list = config.get('refine_link_list', False)
@@ -51,6 +50,8 @@ class IRWorkflow:
         self.href_ignore_words = config.get('href_ignore_words', [])
         self.original_config: Dict[str, Any] = config.copy()
         self.s3_artifact_bucket = config.get("s3_artifact_bucket")
+        self.browser = (config.get('browser_type') or 'chromium').lower()
+        self.past_browser = None
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -77,7 +78,22 @@ class IRWorkflow:
     def get_base_url(self, url: str) -> str:
         parsed_url = urlparse(url)
         return f"{parsed_url.scheme}://{parsed_url.netloc}"
-    
+
+    def switch_browser(self):
+        if self.browser == 'chromium' and not self.past_browser:
+            self.browser = 'firefox'
+        elif self.browser == 'firefox' and not self.past_browser:
+            self.browser = 'chromium'
+
+        print('already switched browser and still doesnt work... ur cooked')
+        return
+
+    def get_browser(self, p):
+        if self.browser == 'firefox':
+            return p.firefox
+            
+        return p.chromium
+        
     async def _build_link_from_template(self) -> Optional[str]:
         """
         Try to construct the earnings link using a link template and variables.
@@ -131,11 +147,12 @@ class IRWorkflow:
             print(f"Iteration {attempt+1} of 8")
             candidate_elements = []
             async with async_playwright() as p:
-                print('launching chromium')
-                browser = p.chromium
+                print('launching browser')
+                browser = self.get_browser(p)
                 if attempt > 1:
-                    print('chromium aint working, switching to firefox')
-                    browser = p.firefox
+                    print(f'{self.browser} aint working, switching to a different one')
+                    self.switch_browser()
+                    browser = self.get_browser(p)
 
                 browser = await browser.launch(
                     headless=True,
@@ -183,7 +200,7 @@ class IRWorkflow:
                     print(f"Found {len(elements)} elements with selector '{selector}'")
                     for el in elements:
                         text: str = (await el.inner_text()).strip()
-                        if self.key_phrase in text:
+                        if self.key_phrase.lower() in text.lower():
                             candidate_elements.append((el, text))
                 
                 # If we want to refine the candidate list (or if no candidates found), check href values
@@ -286,11 +303,12 @@ class IRWorkflow:
         for attempt in range(8):
             print(f"Iteration {attempt+1} of 8")
             async with async_playwright() as p:
-                browser_type = p.chromium if attempt <= 1 else p.firefox
-                if attempt <= 1:
-                    print("launching chromium")
-                else:
-                    print("chromium ain't working, switching to firefox")
+                browser_type = self.get_browser(p)
+                if attempt > 1:
+                    print(f"{self.browser} not working... switching to a different one")
+                    self.switch_browser()
+                    browser_type = self.get_browser(p)
+
                 browser = await browser_type.launch(
                     headless=True,
                     args=[
@@ -371,10 +389,11 @@ class IRWorkflow:
         else:
             print('Extracting content from webpage')
             content = await self.extract_html_text(link)
-        # Call LLM function asynchronously. Here we assume a separate async function for groq.
+
+        if not content:
+            raise Exception('Content was not able to be scraped')
         metrics = await self.extract_financial_metrics(content)
         discord_message = self.analyze_financial_metrics(metrics)
-        print(discord_message)
         print('punting discord message')
         self.punt_message_to_discord(discord_message)
         self.store_artifacts(
@@ -385,79 +404,68 @@ class IRWorkflow:
         )
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
-        hist = json.loads(self.json_data)
-        reported = extracted_data['metrics']
+        hist: Dict[str, Any] = json.loads(self.json_data)
+        metrics: Dict[str, Any] = extracted_data.get("metrics", {})
 
-        # Determine emojis for comparison
-        def compare(actual, estimate):
+        def compare(actual: float, estimate: Optional[float]) -> str:
+            if estimate is None:
+                return "🟡"
             if actual > estimate:
                 return "🟢"
-            elif actual < estimate:
+            if actual < estimate:
                 return "🔴"
-            else:
-                return "🟡"
+            return "🟡"
 
-        classification_map = {
-            'bullish':"🟢",
-            'bearish':"🔴",
-            'neutral':"🟡"
-        }
+        messages: List[str] = []
 
-        # Generate comparisons
-        revenue_msg = f"Revenue: ${reported['revenue_billion']}B vs ${hist['current_quarter_sales_estimate_millions']/1000:.2f}B {compare(reported['revenue_billion'], hist['current_quarter_sales_estimate_millions']/1000)}"
-        gaap_eps_msg = f"GAAP EPS: ${reported['gaap_eps']} vs ${hist['current_quarter_eps_mean']:.2f} {compare(reported['gaap_eps'], hist['current_quarter_eps_mean'])}"
-        non_gaap_eps_msg = f"Non-GAAP EPS: ${reported['non_gaap_eps']} vs ${hist['current_quarter_eps_mean']:.2f} {compare(reported['non_gaap_eps'], hist['current_quarter_eps_mean'])}"
+        # Process current quarter metrics
+        current: Dict[str, Any] = metrics.get("current_quarter", {})
+        for key, actual in current.items():
+            hist_val: Optional[float] = hist.get(f"current_{key}")
+            comp: str = compare(actual, hist_val) if hist_val is not None else ""
+            messages.append(f"{key.replace('billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
 
-        # Analyze forward guidance
-        guidance = reported['forward_guidance']
+        messages.append('\n')
 
-        revenue_billion_range = guidance['revenue_billion_range']
-        if not revenue_billion_range:
-            revenue_billion_range = [None, None]
+        # Process full year metrics, if available
+        full_year: Dict[str, Any] = metrics.get("full_year", {})
+        for key, actual in full_year.items():
+            hist_val: Optional[float] = hist.get(f"full_year_{key}")
+            comp: str = compare(actual, hist_val) if hist_val is not None else ""
+            messages.append(f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
 
-        if len(revenue_billion_range) == 1:
-            revenue_billion_range = [revenue_billion_range[0], revenue_billion_range[0]]
+        # Process forward guidance metrics
+        forward_guidance: Dict[str, Any] = metrics.get("forward_guidance", {})
+        forward_messages: List[str] = []
+        for period, guidance in forward_guidance.items():
+            period_msgs: List[str] = []
+            for key, value in guidance.items():
+                if isinstance(value, list):
+                    if len(value) == 1:
+                        value = [value[0], value[0]]
+                    period_msgs.append(f"{key.replace('_', ' ').title()}: {value[0]:.2f}B - {value[1]:.2f}B")
+                else:
+                    period_msgs.append(f"{key.replace('_', ' ').title()}: {value}")
+            forward_messages.append(f"\n{period.replace('_', ' ').title()}:\n" + "\n".join(period_msgs))
 
-        forward_revenue_msg = f"Forward Revenue: ${guidance['revenue_billion_range'][0]}B - ${guidance['revenue_billion_range'][1]}B vs ${hist['next_quarter_sales_estimate_millions']/1000:.2f}B"
+        sentiment_snippets: List[Dict[str, str]] = extracted_data.get("sentiment_snippets", [])
+        classification_map: Dict[str, str] = {'bullish': "🟢", 'bearish': "🔴", 'neutral': "🟡"}
+        sentiment_msgs: str = "\n".join(
+            [f"- {s.get('snippet', '')} {classification_map.get(s.get('classification', '').lower(), '🟡')}" 
+            for s in sentiment_snippets]
+        )
 
-        non_gaap_gross_margin_range = guidance['non_gaap_gross_margin_range']
-        if not non_gaap_gross_margin_range:
-            non_gaap_gross_margin_range = [None, None]
-
-        if len(non_gaap_gross_margin_range) == 1:
-            non_gaap_gross_margin_range = [non_gaap_gross_margin_range[0], non_gaap_gross_margin_range[0]]
-
-        forward_gross_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_gross_margin_range[0]}% - {non_gaap_gross_margin_range[1]}%"
-
-        non_gaap_operating_margin_range = guidance['non_gaap_operating_margin_range']
-        if not non_gaap_operating_margin_range:
-            non_gaap_operating_margin_range = [None, None]
-
-        if len(non_gaap_operating_margin_range) == 1:
-            non_gaap_operating_margin_range = [non_gaap_operating_margin_range[0], non_gaap_operating_margin_range[0]]
-
-        forward_operating_margin_msg = f"Forward Non-GAAP Gross Margin: {non_gaap_operating_margin_range[0]}% - {non_gaap_operating_margin_range[1]}%"
-
-        # Analyze sentiment snippets
-        sentiment_msgs = "\n".join([f"- {s['snippet']} {classification_map.get(s['classification'].lower(), '🟡')}" for s in extracted_data['sentiment_snippets']])
-
-        # Compose final message
-        final_message = (
+        final_message: str = (
             f"### ${self.ticker.upper()} Q{self.quarter} Earnings Analysis\n"
-            f"{revenue_msg}\n"
-            f"{gaap_eps_msg}\n"
-            f"{non_gaap_eps_msg}\n\n"
+            f"{chr(10).join(messages)}\n\n"
             f"### Forward Guidance\n"
-            f"{forward_revenue_msg}\n"
-            f"{forward_gross_margin_msg}\n"
-            f"{forward_operating_margin_msg}\n\n"
+            f"{chr(10).join(forward_messages)}\n\n"
             f"### Sentiment Insights\n"
             f"{sentiment_msgs}"
         )
-
         return final_message[:2000]
 
-    async def extract_financial_metrics(self, pdf_text: str) -> Dict[str, Any]:
+    async def extract_financial_metrics(self, content: str) -> Dict[str, Any]:
         """
         Sends the PDF text to a GPT-like service and returns a dictionary
         with extracted financial metrics such as EPS, net sales, and operating income.
@@ -474,15 +482,19 @@ class IRWorkflow:
             try:
                 client = Groq(api_key=self.groq_api_key)
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="llama-3.3-70b-versatile",
                     messages=[
                         {
                             "role": "system",
-                            "content": prompt
+                            "content": f'''
+                            Follow the below steps unless the provided information is empty or does not contain the earnings press release for {self.ticker} for {self.quarter} {self.year}
+                            DO NOT MAKE UP METRICS, ONLY USE NUMBERS PROVIDED IN THE TEXT
+                            {prompt}
+                            '''
                         },
                         {
                             "role": "user",
-                            "content": pdf_text
+                            "content": content
                         }
                     ],
                     temperature=int(float(self.llm_instructions.get('temperature'))),
@@ -493,9 +505,9 @@ class IRWorkflow:
                 metrics: Dict[str, Any] = json.loads(content)
                 return metrics
 
-            except (json.JSONDecodeError, BadRequestError):
+            except (json.JSONDecodeError, BadRequestError) as e:
                 if attempt == max_attempts - 1:
-                    return {"error": "Failed to parse metrics from GPT response after retries"}
+                    return {"error": f"Failed to parse metrics from GPT response after retries: {e}"}
                 await asyncio.sleep(delay)
                 delay *= 2
 
@@ -506,28 +518,29 @@ class IRWorkflow:
         groq_response: Dict[str, Any],
         discord_message: str
     ) -> None:
-        timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name: str = f"{self.ticker}_{timestamp}.json"
-        stored_config: Dict[str, Any] = self.original_config.copy()
-        if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
-            try:
-                stored_config["llm_instructions"]["system"] = base64.b64decode(
-                    stored_config["llm_instructions"]["system"]
-                ).decode("utf-8")
-            except Exception:
-                pass
+        if self.deployment_type != 'local':
+            timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name: str = f"{self.ticker}_{timestamp}.json"
+            stored_config: Dict[str, Any] = self.original_config.copy()
+            if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
+                try:
+                    stored_config["llm_instructions"]["system"] = base64.b64decode(
+                        stored_config["llm_instructions"]["system"]
+                    ).decode("utf-8")
+                except Exception:
+                    pass
 
-        artifact: Dict[str, Any] = {
-            "ticker": self.ticker,
-            "timestamp": timestamp,
-            "scraped_url": scraped_url,
-            "scraped_content": scraped_content,
-            "groq_response": groq_response,
-            "discord_message": discord_message,
-            "config": stored_config
-        }
-        artifact_json: str = json.dumps(artifact)
-        s3_bucket = self.s3_artifact_bucket
-        s3_client = boto3.client("s3")
-        s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
-        print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")
+            artifact: Dict[str, Any] = {
+                "ticker": self.ticker,
+                "timestamp": timestamp,
+                "scraped_url": scraped_url,
+                "scraped_content": scraped_content,
+                "groq_response": groq_response,
+                "discord_message": discord_message,
+                "config": stored_config
+            }
+            artifact_json: str = json.dumps(artifact)
+            s3_bucket = self.s3_artifact_bucket
+            s3_client = boto3.client("s3")
+            s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
+            print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")

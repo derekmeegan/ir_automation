@@ -29,7 +29,7 @@ def process() -> Any:
     os.environ["DEFAULT_STEALTH"] = 'true'
     os.environ["DEFAULT_IGNORE_HTTPS_ERRORS"] = 'true'
     deployment_type = os.environ.get("DEPLOYMENT_TYPE", "")
-    
+
     config = {
         "quarter": os.environ.get("QUARTER", ""),
         "year": os.environ.get("YEAR", ""),

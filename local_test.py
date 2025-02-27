@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     os.environ["QUARTER"] = '2'
     os.environ["YEAR"] = '2025'
-    os.environ["JSON_DATA"] = '{"ticker": "NTNX", "date": "2025-02-26", "current_quarter_eps_mean": 0.47, "next_quarter_eps_mean": 0.29, "current_fiscal_year_eps_mean": 1.5, "current_quarter_sales_estimate_millions": 641.49, "next_quarter_sales_estimate_millions": 594.1, "current_fiscal_year_sales_mean_millions": 2458.05}'
+    os.environ["JSON_DATA"] = '{"current_revenue_billion": 161.71, "current_transaction_revenue_billion": 52.96, "current_subscription_revenue_billion": 108.75, "current_gross_profit_billion": 108.32, "current_net_income_billion": 12.85, "current_adj_ebitda_billion": 44.2, "current_non_gaap_net_income_billion": 32.6, "current_free_cash_flow_billion": 35.88, "full_year_revenue_billion": 681.88, "full_year_transaction_revenue_billion": 245.69, "full_year_subscription_revenue_billion": 436.19, "full_year_gross_profit_billion": 441.79, "full_year_net_income_billion": 29.96, "full_year_adj_ebitda_billion": 148.11, "full_year_non_gaap_net_income_billion": 99.45, "full_year_free_cash_flow_billion": 99.94, "next_quarter_sales_estimate_billion": 175.0, "fiscal_year_sales_estimate_billion": 179.0}'
     os.environ["DEPLOYMENT_TYPE"] = 'local'
     os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
     os.environ["DISCORD_WEBHOOK_URL"] = os.getenv("DISCORD_WEBHOOK_URL")
@@ -286,55 +286,92 @@ if __name__ == "__main__":
     # })
 
     os.environ["SITE_CONFIG"] = json.dumps({
-        "ticker": "CRM",
-        "base_url": "https://investor.salesforce.com/financials/default.aspx",
-        "key_phrase": "Q4",
+        "ticker": "LZ",
+        "browser_type": "firefox",
+        "base_url": "https://investors.legalzoom.com/news-events/press-releases",
+        "key_phrase": "LegalZoom Reports",
         "llm_instructions": {
         "system": """
+            # Metric Mapping Definition:
+            #   Revenue -> revenue_billion
+            #   Transaction Revenue -> transaction_revenue_billion
+            #   Subscription Revenue -> subscription_revenue_billion
+            #   Gross Profit -> gross_profit_billion
+            #   Net Income -> net_income_billion
+            #   Adjusted Ebitda -> adj_ebitda_billion
+            #   Non Gaap Net Income -> non_gaap_net_income_billion
+            #   Free Cash Flow -> free_cash_flow_billion
+            #
+            # All numerical values provided in millions should be converted to billions by dividing by 1000 and formatted to two decimal places.
+
             You will receive a body of text containing a company's financial report and historical financial metrics. Your task is to:
 
-            1. **Extract Key Financial Metrics:**
-            - Revenue (most recent quarter)
-            - GAAP EPS (most recent quarter)
-            - Non-GAAP EPS (most recent quarter)
-            - Forward guidance for revenue and margins (if available)
+            1. **Extract Financial Metrics:**
+            - Identify and extract every financial metric mentioned in the report according to the mapping above.
+            - Explicitly differentiate between **current quarter metrics** and **full year metrics** if both are present. For each metric, capture its value under either "current_quarter" or "full_year" in the output.
+            - Additionally, extract any forward guidance metrics and differentiate them into:
+                    - **Next Quarter Forward Guidance**
+                    - **Fiscal Year Forward Guidance**
+                For each forward guidance metric, if only a single value is provided, output an array with that value repeated.
+            - **Important:** When outputting any range values (such as forward guidance ranges), output a valid JSON array with exactly two numeric elements separated by a comma. For example, if the value is 0.18, the output must be `[0.18, 0.18]` (ensure there is a comma between the numbers).
+            - Convert large metric values (provided in millions) to billions format.
 
             2. **Compare Metrics:**
-            Provide these metrics in the following format:
-            - "Revenue: $X billion"
-            - "GAAP EPS: $X"
-            - "Non-GAAP EPS: $X"
-            - "Forward Guidance: Revenue: $X - $Y billion; Non-GAAP Gross Margin: X% - Y%"
+            - When historical data is available, compare each current quarter and full year metric with its corresponding historical metric.
+            - Ensure that the keys match exactly. For example, if the report metric is "revenue_billion" under "current_quarter", compare it with the historical metric "current_revenue_billion".
 
             3. **Classify Sentiment:**
-            - Identify forward guidance statements that could impact future performance.
-            - Classify them as:
-                - "Bullish" if they indicate growth, expansion, or optimistic outlook.
-                - "Bearish" if they indicate contraction, risks, or cautious guidance.
-                - "Neutral" if guidance is stable or lacks clear directional information.
+            - Identify any forward guidance statements or excerpts that may impact future performance.
+            - Classify these excerpts as:
+                - "Bullish" if they suggest growth, expansion, or an optimistic outlook.
+                - "Bearish" if they imply contraction, risk, or a cautious tone.
+                - "Neutral" if they are ambiguous or lack clear directional sentiment.
+            - Include the exact text excerpts (snippets) that support each sentiment classification.
 
             4. **Output Structure:**
-            Produce the output as a JSON object with the following structure. If there are not ranges for forward guidance, provide the same number twice:
+            - Produce the output as a JSON object with the following structure. For any metrics representing ranges (e.g., forward guidance), if only a single value is provided, output that value twice in the array.
             {
                 "metrics": {
-                "revenue_billion": X.XX,
-                "gaap_eps": X.XX,
-                "non_gaap_eps": X.XX,
-                "forward_guidance": {
-                    "revenue_billion_range": [X.XX, Y.YY],
-                    "non_gaap_gross_margin_range": [X, Y],
-                    "non_gaap_operating_margin_range": [X, Y]
-                }
+                    "current_quarter": {
+                        "<metric_key>": <value>,
+                        ...
+                    },
+                    "full_year": {
+                        "<metric_key>": <value>,
+                        ...
+                    },
+                    "forward_guidance": {
+                        "next_quarter": {
+                            "<metric_key>_range": [<lower>, <upper>],
+                            ...
+                        },
+                        "fiscal_year": {
+                            "<metric_key>_range": [<lower>, <upper>],
+                            ...
+                        }
+                    }
+                },
+                "comparisons": {
+                    "current_quarter": {
+                        "<metric_key>": "Current: $X vs Historical: $Y",
+                        ...
+                    },
+                    "full_year": {
+                        "<metric_key>": "Full Year: $X vs Historical: $Y",
+                        ...
+                    }
                 },
                 "sentiment_snippets": [
-                {"snippet": "Text excerpt here", "classification": "Bullish/Bearish/Neutral"}
+                    {"snippet": "Text excerpt here", "classification": "Bullish/Bearish/Neutral"}
                 ]
             }
 
             5. **Highlight Context:**
-            Include the exact text excerpts as "snippets" from the report that support each sentiment classification.
+            - Include the exact text excerpts as "snippets" from the report that support each sentiment classification.
+            - Ignore standard legal language.
 
-            Pass this JSON output to the Python function for comparison.
+            **Output Requirement:**
+            - The entire output must be valid JSON. Output the JSON in a code block (using triple backticks) to ensure proper formatting.
         """,
         "temperature": 0
         },
@@ -344,39 +381,21 @@ if __name__ == "__main__":
         },
         "refine_link_list": True,
         "selectors": [
-        "a.doc-link"
+        "a"
         ],
-        "extraction_method": 'pdf',
+        # "extraction_method": 'pdf',
         "url_ignore_list": [
-            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q3/CRM-Q3-FY25-Earnings-Press-Release-w-financials.pdf",
-            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q2/CRM-Q2-FY25-Earnings-Press-Release-w-financials.pdf",
-            "https://s23.q4cdn.com/574569502/files/doc_financials/2025/q1/CRM-Q1-FY25-Earnings-Press-Release-w-financials.pdf"
         ],
         "verify_keywords": {
         "fixed_terms": [
-           "FY",
-            "earnings",
-            "press",
-            "release"
+           "news-release-details",
+            "financial"
         ],
-        "quarter_with_q": True,
+        "quarter_as_string": True,
         "requires_quarter": True,
         "requires_year": True
         },
-        "href_ignore_words": [
-            "FY24",
-            "FY23",
-            "FY22",
-            "FY21",
-            "FY20",
-            "FY19",
-            "FY18",
-            "FY17",
-            "FY16",
-            "FY15",
-            "FY14",
-            "FY13"
-            ],
+        "href_ignore_words": []
     })
 
     result = process()
