@@ -81,7 +81,7 @@ class IRWorkflow:
         """
         Write the discord message to a DynamoDB table specified by self.messages_table.
         """
-        timestamp: str = datetime.now().isoformat()
+        timestamp: str = datetime.utcnow().isoformat()
         message_id: str = str(uuid.uuid4())
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")

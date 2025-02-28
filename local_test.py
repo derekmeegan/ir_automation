@@ -18,6 +18,7 @@ if __name__ == "__main__":
     os.environ["DEPLOYMENT_TYPE"] = 'local'
     os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
     os.environ["DISCORD_WEBHOOK_URL"] = os.getenv("DISCORD_WEBHOOK_URL")
+    os.environ['MESSAGES_TABLE'] = os.getenv('MESSAGES_TABLE')
     # SITE_CONFIG should be a JSON string.
     # os.environ["SITE_CONFIG"] = json.dumps({
     #    "base_url": "https://ir.enovix.com/",
