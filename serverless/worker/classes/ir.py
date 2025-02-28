@@ -213,7 +213,7 @@ class IRWorkflow:
                     pass
 
                 try:
-                    await page.wait_for_selector(self.selectors[0], timeout=5000)
+                    await page.wait_for_selector(self.selectors[0], timeout=10000)
                 except Exception as e:
                     print(f"Error waiting for selector '{self.selectors[0]}': {e}")
 

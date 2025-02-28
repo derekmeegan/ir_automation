@@ -287,7 +287,7 @@ class MyServerlessStack(Stack):
                 minute="0",
                 hour="0",
                 month="*",
-                week_day="MON-THU",
+                week_day="MON-FRI",
                 year="*"
             )
         )
