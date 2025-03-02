@@ -451,7 +451,9 @@ class IRWorkflow:
         for key, actual in current.items():
             hist_val: Optional[float] = hist.get(f"current_{key}")
             comp: str = compare(actual, hist_val)
-            messages.append(f"{key.replace('billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
+            messages.append(
+                f"{key.replace('billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}"
+            )
 
         messages.append('\n')
 
@@ -460,7 +462,9 @@ class IRWorkflow:
         for key, actual in full_year.items():
             hist_val: Optional[float] = hist.get(f"full_year_{key}")
             comp: str = compare(actual, hist_val)
-            messages.append(f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}")
+            messages.append(
+                f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}"
+            )
 
         # Process forward guidance metrics
         forward_guidance: Dict[str, Any] = metrics.get("forward_guidance", {})
@@ -468,10 +472,16 @@ class IRWorkflow:
         for period, guidance in forward_guidance.items():
             period_msgs: List[str] = []
             for key, value in guidance.items():
-                if isinstance(value, list):
+                if isinstance(value, dict) and "low" in value and "high" in value:
+                    period_msgs.append(
+                        f"{key.replace('_', ' ').title()}: {value['low']:.2f}B - {value['high']:.2f}B"
+                    )
+                elif isinstance(value, list):
                     if len(value) == 1:
                         value = [value[0], value[0]]
-                    period_msgs.append(f"{key.replace('_', ' ').title()}: {value[0]:.2f}B - {value[1]:.2f}B")
+                    period_msgs.append(
+                        f"{key.replace('_', ' ').title()}: {value[0]:.2f}B - {value[1]:.2f}B"
+                    )
                 else:
                     period_msgs.append(f"{key.replace('_', ' ').title()}: {value}")
             forward_messages.append(f"\n{period.replace('_', ' ').title()}:\n" + "\n".join(period_msgs))
@@ -479,7 +489,7 @@ class IRWorkflow:
         sentiment_snippets: List[Dict[str, str]] = extracted_data.get("sentiment_snippets", [])
         classification_map: Dict[str, str] = {'bullish': "🟢", 'bearish': "🔴", 'neutral': "🟡"}
         sentiment_msgs: str = "\n".join(
-            [f"- {s.get('snippet', '')} {classification_map.get(s.get('classification', '').lower(), '🟡')}" 
+            [f"- {s.get('snippet', '')} {classification_map.get(s.get('classification', '').lower(), '🟡')}"
             for s in sentiment_snippets]
         )
 
