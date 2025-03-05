@@ -436,8 +436,12 @@ class IRWorkflow:
         metrics: Dict[str, Any] = extracted_data.get("metrics", {})
 
         def compare(actual: float, estimate: Optional[float]) -> str:
+            if actual is None:
+                actual = 0
+
             if estimate is None:
-                return "🟡"
+                estimate = 0
+
             if actual > estimate:
                 return "🟢"
             if actual < estimate:
