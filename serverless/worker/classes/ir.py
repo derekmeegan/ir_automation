@@ -434,6 +434,8 @@ class IRWorkflow:
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         hist: Dict[str, Any] = json.loads(self.json_data)
         metrics: Dict[str, Any] = extracted_data.get("metrics", {})
+        if not metrics.get("current_quarter") and not metrics.get("full_year") and not metrics.get("forward_guidance").get('next_quarter') and not metrics.get("forward_guidance").get('fiscal_year'):
+            raise Exception('Looks like earnings were attempting to be scraped from the wrong link.')
 
         def compare(actual: float, estimate: Optional[float]) -> str:
             if actual is None:
