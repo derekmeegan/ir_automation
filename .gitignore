@@ -173,3 +173,4 @@ cython_debug/
 /infra/cdk.out/
 *.ipynb
 *.json
+find_press_releases.py
