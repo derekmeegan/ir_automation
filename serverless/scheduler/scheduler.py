@@ -6,7 +6,7 @@ import logging
 import requests
 import pandas as pd
 from io import StringIO
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -24,7 +24,7 @@ def fetch_html(url: str) -> str:
 
 def lambda_handler(event, context):
     days_from_now = event.get('days', 7)
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     target_date = today + timedelta(days=int(days_from_now))
     target_str = target_date.strftime("%Y-%m-%d")
     logger.info(f"Scraping earnings for {target_str}")
@@ -75,7 +75,8 @@ def lambda_handler(event, context):
         .rename(columns = {
             'Symbol': 'ticker',
             'Earnings Call Time': 'release_time',
-            'Event Name': 'event_name'
+            'Event Name': 'event_name',
+            'Company': 'company_name'
         })
         .loc[lambda row: row.release_time.isin(['AMC', 'BMO'])]
         .assign(
@@ -85,7 +86,7 @@ def lambda_handler(event, context):
             date = target_str,
             is_active = False
         )
-        [['ticker', 'date', 'release_time', 'quarter', 'year', 'is_active']]
+        [['ticker', 'date', 'release_time', 'quarter', 'year', 'is_active', 'company_name']]
         .drop_duplicates(subset = ['ticker', 'date'])
         .to_json(orient = 'records')
     )
