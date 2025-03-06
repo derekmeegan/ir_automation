@@ -170,7 +170,8 @@ class IRWorkflow:
             both > quarter only > year only.
         On the final iteration, returns the best candidate found (even with lower priority).
         """
-        for attempt in range(8):
+        attempt = 0
+        while True:
             print(f"Iteration {attempt+1} of 8")
             candidate_elements = []
             async with async_playwright() as p:
@@ -206,14 +207,14 @@ class IRWorkflow:
                 except Exception as e:
                     print(f"Error during page.goto (networkidle): {e}")
                     try:
-                        await page.goto(self.base_url, wait_until="domcontentloaded", timeout=10000)
+                        await page.goto(self.base_url, wait_until="domcontentloaded", timeout=5000)
                     except Exception as inner_e:
                         print(f"Fallback navigation failed: {inner_e}")
                     print('timeout reached, attempting to pull content thats there')
                     pass
 
                 try:
-                    await page.wait_for_selector(self.selectors[0], timeout=10000)
+                    await page.wait_for_selector(self.selectors[0], timeout=5000)
                 except Exception as e:
                     print(f"Error waiting for selector '{self.selectors[0]}': {e}")
 
@@ -227,6 +228,7 @@ class IRWorkflow:
                     print(f"Found {len(elements)} elements with selector '{selector}'")
                     for el in elements:
                         text: str = (await el.inner_text()).strip()
+                        print(text)
                         if self.key_phrase.lower() in text.lower():
                             candidate_elements.append((el, text))
                 
@@ -284,9 +286,11 @@ class IRWorkflow:
                             await browser.close()
                             return best_href
                         else:
-                            print(f"No candidate with sufficient priority found in iteration {attempt+1}")
+                            print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
+                            attempt -=1
                     else:
-                        print("No candidate elements found in this iteration.")
+                        print(f"No candidate elements found in in iteration {attempt+1}. Decrementing 1 from the attempt.")
+                        attempt -=1
                 else:
                     # If not refining, simply return the href of the first candidate
                     link = await candidate_elements[0][0].get_attribute("href")
@@ -294,6 +298,8 @@ class IRWorkflow:
                     await browser.close()
                     return link
                 await browser.close()
+            
+            attempt +=1
             await asyncio.sleep(5)
         raise Exception("Earnings link not found after 5 iterations.")
 
@@ -357,18 +363,19 @@ class IRWorkflow:
                 )
                 page = await context.new_page()
                 try:
-                    await page.goto(url, wait_until="networkidle", timeout=10000)
+                    await page.goto(url, wait_until="networkidle", timeout=20000)
                 except Exception as e:
                     print(f"Error during page.goto (networkidle): {e}")
                     try:
-                        await page.goto(url, wait_until="domcontentloaded", timeout=10000)
+                        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                     except Exception as inner_e:
                         print(f"Fallback navigation failed: {inner_e}")
                     print("timeout reached, attempting to pull content that's there")
                 try:
                     content: str = await page.inner_text(self.page_content_selector, timeout=10000)
                     await browser.close()
-                    return content
+                    if content or attempt > 6:
+                        return content
                 except Exception as e:
                     print(f"Error extracting content: {e}")
                     await browser.close()
