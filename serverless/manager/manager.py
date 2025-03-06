@@ -55,21 +55,22 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         json_data = generate_json_for_ticker(ticker, today_str)
         site_config = get_site_config(ticker)
+        
+        if json_data is not None and site_config is not None:
+            variables = {
+                "QUARTER": str(int(float(quarter))),
+                "YEAR": str(int(float(year))),
+                "JSON_DATA": json_data,
+                "SITE_CONFIG": site_config,
+                "GROQ_API_SECRET_ARN": GROQ_API_SECRET_ARN,
+                "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN,
+                "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
+                "MESSAGES_TABLE": MESSAGES_TABLE
+            }
 
-        variables = {
-            "QUARTER": str(int(float(quarter))),
-            "YEAR": str(int(float(year))),
-            "JSON_DATA": json_data,
-            "SITE_CONFIG": site_config,
-            "GROQ_API_SECRET_ARN": GROQ_API_SECRET_ARN,
-            "DISCORD_WEBHOOK_SECRET_ARN": DISCORD_WEBHOOK_SECRET_ARN,
-            "ARTIFACT_BUCKET": ARTIFACT_BUCKET,
-            "MESSAGES_TABLE": MESSAGES_TABLE
-        }
-
-        function_name = f"WorkerFunction-{ticker}"
-        instance_id = create_or_update_worker_instance(function_name, variables)
-        instance_ids.append(instance_id)
+            function_name = f"WorkerFunction-{ticker}"
+            instance_id = create_or_update_worker_instance(function_name, variables)
+            instance_ids.append(instance_id)
 
     poll_and_trigger(instance_ids)
 
@@ -80,7 +81,7 @@ def generate_json_for_ticker(ticker: str, today_str: str) -> str:
     response = historical_table.get_item(Key={"ticker": ticker, "date": today_str})
     item = response.get("Item", {})
     if not item:
-        raise ValueError(f"No historical data found for ticker {ticker}")
+        return None
     return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
 def get_site_config(ticker: str) -> str:
@@ -90,6 +91,8 @@ def get_site_config(ticker: str) -> str:
     config_table = dynamo.Table(CONFIG_TABLE)
     response = config_table.get_item(Key={"ticker": ticker})
     item = response.get("Item", {})
+    if not item:
+        return None
     return json.dumps(item, default=lambda o: float(o) if isinstance(o, Decimal) else o)
 
 def create_or_update_worker_instance(instance_name: str, variables: Dict[str, Any]) -> None:
