@@ -23,11 +23,12 @@ The application is built on AWS serverless architecture using AWS CDK for infras
 
 ### Components
 
+- `services/worker`: Processes earnings releases using Playwright and Groq LLM
 - `serverless/scheduler`: Monitors upcoming earnings announcements using Yahoo Finance
-- `serverless/worker`: Processes earnings releases using Playwright and Groq LLM
 - `serverless/database_handlers`: Manages data persistence in DynamoDB
 - `serverless/manager`: Provides API endpoints for manual control
 - `infra`: AWS CDK infrastructure code
+- `tests`: Unit and integration tests
 
 ## Setup and Deployment
 
@@ -85,6 +86,20 @@ python local_test.py
 
 This script simulates the processing of an earnings release without deploying to AWS.
 
+## Running Tests
+
+The project uses pytest for testing. To run tests:
+
+```bash
+pytest
+```
+
+You can also use pre-commit hooks to run tests automatically before committing:
+
+```bash
+pre-commit install
+```
+
 ## Configuration
 
 The application is configured using a JSON configuration object that specifies:
@@ -96,11 +111,3 @@ The application is configured using a JSON configuration object that specifies:
 - LLM instructions for extracting financial metrics
 
 Example configuration is available in `local_test.py`.
-
-## License
-
-[Specify license information]
-
-## Contributors
-
-[List contributors]
