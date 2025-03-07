@@ -7,7 +7,7 @@ import asyncio
 import PyPDF2
 import requests
 from groq import Groq, BadRequestError
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
@@ -17,27 +17,19 @@ class IRWorkflow:
         """
         config: JSON config with keys such as:
             - base_url: str
-            - link_template: Optional[str] (e.g., with placeholders for date, quarter, year)
             - selectors: List[str] for fallback scraping
             - verify_keywords: Dict[str, Any] for quarter/year verification (e.g., {"quarter": "Q3", "year": "24"})
             - extraction_method: 'pdf' or 'html'
             - custom_pdf_edit: Optional[[[str], str]]
             - llm_instructions: Dict[str, Any] (e.g., system prompt, temperature)
-            - polling_config: Dict[str, Any] with poll interval settings
         """
         self.base_url: str = config.get("base_url", "")
-        self.link_template: Optional[str] = config.get("link_template")
         self.selector: list[str] = config.get('selector', 'a')
-        self.key_phrase: str = config.get("key_phrase", "")
         self.verify_keywords = config.get("verify_keywords", {})
-        self.url_keywords = config.get("url_keywords", {})
         self.extraction_method: str = config.get("extraction_method", None)
-        self.custom_pdf_edit = config.get("custom_pdf_edit")
         self.llm_instructions: Dict[str, Any] = config.get("llm_instructions", {})
-        self.polling_config: Dict[str, Any] = config.get("polling_config", {"interval": 60})
-        self.refine_link_list = config.get('refine_link_list', False)
         self.page_content_selector = config.get("page_content_selector", "body")
-        self.secret_arn = config.get("groq_api_secret_arn")
+        self.groq_api_secret_arn = config.get("groq_api_secret_arn")
         self.deployment_type = config.get("deployment_type", "hosted")
         self.groq_api_key = config.get("groq_api_key") or self._get_groq_api_key()
         self.discord_webhook_arn = config.get("discord_webhook_arn")
@@ -46,13 +38,11 @@ class IRWorkflow:
         self.year = config.get('year')
         self.ticker = config.get('ticker')
         self.json_data = config.get('json_data')
-        self.llm_instructions = config.get('llm_instructions')
         self.url_ignore_list = config.get('url_ignore_list', [])
         self.href_ignore_words = config.get('href_ignore_words', [])
         self.original_config: Dict[str, Any] = config.copy()
         self.s3_artifact_bucket = config.get("s3_artifact_bucket")
-        self.browser = (config.get('browser_type') or 'chromium').lower()
-        self.past_browser = None
+        self.browser = config.get('browser_type', 'chromium').lower()
         self.messages_table = config.get('messages_table')
 
     def _get_discord_webhook_url(self):
@@ -69,9 +59,9 @@ class IRWorkflow:
     def _get_groq_api_key(self):
         """Retrieve th e Groq API key from AWS Secrets Manager."""
         if self.deployment_type != 'local':
-            if self.secret_arn:
+            if self.groq_api_secret_arn:
                 secrets_client = boto3.client("secretsmanager", region_name='us-east-1')
-                response = secrets_client.get_secret_value(SecretId=self.secret_arn)
+                response = secrets_client.get_secret_value(SecretId=self.groq_api_secret_arn)
                 secret_dict = json.loads(response["SecretString"])
                 return secret_dict.get("GROQ_API_KEY")
             else:
@@ -81,7 +71,7 @@ class IRWorkflow:
         """
         Write the discord message to a DynamoDB table specified by self.messages_table.
         """
-        timestamp: str = datetime.utcnow().isoformat()
+        timestamp: str = datetime.now(timezone.utc).isoformat()
         message_id: str = str(uuid.uuid4())
 
         dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
@@ -106,22 +96,22 @@ class IRWorkflow:
         parsed_url = urlparse(url)
         return f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-    async def launch_browser_and_open_page(self, p):
-        print(f'Launching browser: {self.browser}')
+    async def launch_browser_and_open_page(self, p, browser = None):
+        if browser is None:
+            print(f'Launching browser: {self.browser}')
+            browser = p.chromium    
+            if self.browser == 'firefox':
+                browser = p.firefox
 
-        browser = p.chromium    
-        if self.browser == 'firefox':
-            browser = p.firefox
-
-        browser = await browser.launch(
-            headless=True,
-            args=[
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-software-rasterizer",
-                "--headless=new"
-            ]
-        )
+            browser = await browser.launch(
+                headless=True,
+                args=[
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--disable-software-rasterizer",
+                    "--headless=new"
+                ]
+            )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -138,122 +128,77 @@ class IRWorkflow:
             else route.continue_())
             
         return page, browser
-        
-    async def _build_link_from_template(self) -> Optional[str]:
-        """
-        Try to construct the earnings link using a link template and variables.
-        """
-        if self.link_template:
-            print('Link template present, attempting to use it first')
-            try:
-                keywords = self.url_keywords
-                if keywords.get('requires_year', False):
-                    keywords.update({'year': self.year})
 
-                if keywords.get('requires_current_year', False):
-                    keywords.update({'current_year': datetime.now().strftime('%Y')})
-
-                if keywords.get('requires_quarter', False):
-                    quarter = self.quarter
-                    if keywords.get('quarter_as_string', False):
-                        quarter = {
-                            1: 'first',
-                            2: 'second',
-                            3: 'third',
-                            4: 'fourth'
-                        }.get(int(float(quarter)))
-                        if keywords.get('quarter_is_title_case', False):
-                            quarter = quarter.title()
-                    elif keywords.get('quarter_with_q', False):
-                        quarter = f'Q{quarter}'
-
-                    keywords.update({'quarter': quarter})
-
-                link = self.link_template.format(**self.url_keywords)
-                response = requests.head(
-                    link, 
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                )
-                if response.ok:
-                    return link
-            except Exception as e:
-                print(f"Error building link from template: {e}")
-        return None
-
-    async def _scrape_ir_page_for_link(self) -> Optional[str]:
+    async def _scrape_ir_page_for_link(self, page) -> Optional[str]:
         attempt = 0
         domcontentloaded_timeout_count = 0
         waitforselector_timeout_count = 0
-        async with async_playwright() as p:
-            while True:
-                if attempt == 8:
-                    await browser.close()
-                    break
-                print(f"Iteration {attempt+1} of 8")
-                
-                page, browser = await self.launch_browser_and_open_page(p)
+        # async with async_playwright() as p:
+        while True:
+            if attempt == 8:
+                break
+            print(f"Iteration {attempt+1} of 8")
 
-                try:
-                    timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
-                    await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout)
-                except PlaywrightTimeoutError as e:
-                    print('timeout reached, attempting to pull content thats there')
-                    domcontentloaded_timeout_count += 1
-                except Exception as e:
-                    print(f"Error during page.goto (networkidle): {e}")
+            try:
+                timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
+                await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout)
+            except PlaywrightTimeoutError as e:
+                print('timeout reached, attempting to pull content thats there')
+                domcontentloaded_timeout_count += 1
+            except Exception as e:
+                print(f"Error during page.goto (networkidle): {e}")
 
-                try:
-                    timeout = 5_000 if waitforselector_timeout_count < 3 else 10_000
-                    await page.wait_for_selector(self.selector, timeout=timeout)
-                except PlaywrightTimeoutError as e:
-                    print(f"Timeout waiting for selector '{self.selector}': {e}")
-                    waitforselector_timeout_count += 1
-                except Exception as e:
-                    print(f"Error waiting for selector '{self.selector}': {e}")
-                    attempt+=1
+            try:
+                timeout = 5_000 if waitforselector_timeout_count < 3 else 10_000
+                await page.wait_for_selector(self.selector, timeout=timeout)
+            except PlaywrightTimeoutError as e:
+                print(f"Timeout waiting for selector '{self.selector}': {e}")
+                waitforselector_timeout_count += 1
+            except Exception as e:
+                print(f"Error waiting for selector '{self.selector}': {e}")
+                attempt+=1
 
-                print('Extracted page content')
-                elements = []
-                try:
-                    elements = await page.query_selector_all(self.selector)
-                    print(f"Found {len(elements)} elements with selector '{self.selector}'")
-                except Exception as e:
-                    print('error reading selectors from page')
+            print('Extracted page content')
+            elements = []
+            try:
+                elements = await page.query_selector_all(self.selector)
+                print(f"Found {len(elements)} elements with selector '{self.selector}'")
+            except Exception as e:
+                print('error reading selectors from page')
 
-                if not elements:
-                    print(f"No elements found in in iteration {attempt+1}. Decrementing 1 from the attempt.")
-                    attempt -=1
+            if not elements:
+                print(f"No elements found in in iteration {attempt+1}. Decrementing 1 from the attempt.")
+                attempt -=1
+                continue
+            
+            print('Refining element list')
+            keywords = self._generate_search_keywords()
+            candidates = []
+            for el in elements:
+                href = await el.get_attribute("href")
+                if not href or href in self.url_ignore_list:
+                    continue
+                if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
+                    continue
+                if any(ignore_word.lower() in href.lower() for ignore_word in self.href_ignore_words):
                     continue
                 
-                print('Refining element list')
-                keywords = self._generate_search_keywords()
-                candidates = []
-                for el in elements:
-                    href = await el.get_attribute("href")
-                    if not href or href in self.url_ignore_list:
-                        continue
-                    if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
-                        continue
-                    if any(ignore_word.lower() in href.lower() for ignore_word in self.href_ignore_words):
-                        continue
-                    
-                    href_lower = href.lower()
-                    match_count: int = sum(1 for kw in keywords if kw in href_lower)
-                    candidates.append((match_count, el, href))
+                href_lower = href.lower()
+                match_count: int = sum(1 for kw in keywords if kw in href_lower)
+                candidates.append((match_count, el, href))
 
-                candidates.sort(key=lambda x: x[0], reverse=True)
-                best_priority, best_el, best_href = candidates[0]
-                print(f"Best candidate found with priority {best_priority}: {best_href}")
-                if best_priority > 0:
-                    print(f"Returning link: {best_href}")
-                    await browser.close()
-                    return best_href
-                else:
-                    print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
-                    attempt -=1
-            
-            attempt +=1
-            await asyncio.sleep(3)
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            best_priority, best_el, best_href = candidates[0]
+            print(f"Best candidate found with priority {best_priority}: {best_href}")
+            if best_priority > 0:
+                print(f"Returning link: {best_href}")
+                return best_href
+            else:
+                print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
+                attempt -=1
+        
+        attempt +=1
+        await asyncio.sleep(3)
         raise Exception(f"Earnings link not found after {attempt+1} iterations.")
 
     def _generate_search_keywords(self) -> List[str]:
@@ -290,17 +235,6 @@ class IRWorkflow:
             
         return [str(kw).lower() for kw in search_terms if kw]
 
-    async def get_earnings_link(self) -> Optional[str]:
-        """
-        Returns the earnings link either via template or by scraping the page.
-        """
-        link = await self._build_link_from_template()
-        if link:
-            return link
-
-        print('Template not available, scraping from IR site')
-        return await self._scrape_ir_page_for_link()
-
     def extract_pdf_text(self, pdf_url: str) -> str:
         """
         Download PDF and extract text using PyPDF2, applying custom editing if provided.
@@ -313,61 +247,37 @@ class IRWorkflow:
         for page in reader.pages:
             page_text = page.extract_text() or ""
             text += page_text + "\n"
-        if self.custom_pdf_edit:
-            text = self.custom_pdf_edit(text)
         return text
 
-    async def extract_html_text(self, url: str) -> str:
+    async def extract_html_text(self, url: str, page) -> str:
         if url.startswith('/'):
             url = self.get_base_url(self.base_url) + url
 
-        async with async_playwright() as p:
-            domcontentloaded_timeout_count = 0
-            pagerinnertext_timeout_count = 0
-            for attempt in range(8):
-                print(f"Iteration {attempt+1} of 8")
-                page, browser = await self.launch_browser_and_open_page(p)
-                try:
-                    timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
-                    await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-                except Exception as e:
-                    print(
-                        f"Error during page.goto (domcontentloaded): {e}"
-                        "timeout reached, attempting to pull content that's there"
-                    )
-                    domcontentloaded_timeout_count += 1
-                try:
-                    timeout = 10_000 if pagerinnertext_timeout_count < 3 else 20_000
-                    content: str = await page.inner_text(self.page_content_selector, timeout=timeout)
-                    await browser.close()
-                    if content or attempt > 6:
-                        return content
-                except PlaywrightTimeoutError as e:
-                    print(f"Timeout waiting for content")
-                    pagerinnertext_timeout_count += 1
-                except Exception as e:
-                    print(f"Error extracting content: {e}")
-                    await browser.close()
-        return ""
-
-    async def poll_for_earnings_link(self) -> str:
-        """
-        Continually polls the IR page for the earnings link.
-        Default polling interval is 5 seconds.
-        """
-        interval: int = int(float(self.polling_config.get("interval", 5)))
-        max_attempts: int = int(float(self.polling_config.get("max_attempts", 60)))
-        for attempt in range(max_attempts):
+        # async with async_playwright() as p:
+        domcontentloaded_timeout_count = 0
+        pagerinnertext_timeout_count = 0
+        for attempt in range(8):
+            print(f"Iteration {attempt+1} of 8")
             try:
-                link = await self.get_earnings_link()
-                if link:
-                    return link
+                timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
             except Exception as e:
-                print(f"Polling attempt {attempt+1}/{max_attempts}: {e}")
-                raise
-            print(f"Attempt {attempt+1}/{max_attempts}: Link not found, waiting {interval} seconds")
-            await asyncio.sleep(interval)
-        raise Exception("Link not found after polling")
+                print(
+                    f"Error during page.goto (domcontentloaded): {e}"
+                    "timeout reached, attempting to pull content that's there"
+                )
+                domcontentloaded_timeout_count += 1
+            try:
+                timeout = 10_000 if pagerinnertext_timeout_count < 3 else 20_000
+                content: str = await page.inner_text(self.page_content_selector, timeout=timeout)
+                if content or attempt > 6:
+                    return content
+            except PlaywrightTimeoutError as e:
+                print(f"Timeout waiting for content")
+                pagerinnertext_timeout_count += 1
+            except Exception as e:
+                print(f"Error extracting content: {e}")
+        return ""
 
     def punt_message_to_discord(self, discord_message: str) -> None:
         requests.post(
@@ -379,33 +289,20 @@ class IRWorkflow:
         )
         print('message sent to discord')
 
-    async def process_earnings(self) -> Dict[str, Any]:
-        """
-        Main workflow: poll for link, extract content (PDF or HTML), and send to LLM for processing.
-        """
-        link = await self.poll_for_earnings_link()
-        if link == "Link not found after polling":
-            return {"error": "Earnings link not found"}
+    async def extract_earnings_content(self, link: str, p, browser) -> str:
+        content = None
         if self.extraction_method == "pdf":
             content = self.extract_pdf_text(link)
         else:
             print('Extracting content from webpage')
-            content = await self.extract_html_text(link)
+            page, browser = await self.launch_browser_and_open_page(p, browser = browser)
+            content = await self.extract_html_text(link, page)
+            await browser.close()
 
         if not content:
             raise Exception('Content was not able to be scraped')
-        metrics = await self.extract_financial_metrics(content)
-        print(metrics)
-        message = self.analyze_financial_metrics(metrics)
-        print('punting discord message')
-        self.punt_message_to_discord(message)
-        self.store_artifacts(
-            scraped_url=link,
-            scraped_content=content,
-            groq_response=metrics,
-            discord_message=message
-        )
-        self.store_message_to_dynamo(message)
+
+        return content
 
     def analyze_financial_metrics(self, extracted_data: dict) -> str:
         hist: Dict[str, Any] = json.loads(self.json_data)
@@ -539,7 +436,7 @@ class IRWorkflow:
         discord_message: str
     ) -> None:
         if self.deployment_type != 'local':
-            timestamp: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp: str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             file_name: str = f"{self.ticker}_{timestamp}.json"
             stored_config: Dict[str, Any] = self.original_config.copy()
             if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
@@ -564,3 +461,23 @@ class IRWorkflow:
             s3_client = boto3.client("s3")
             s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
             print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")
+            
+    async def process_earnings(self) -> Dict[str, Any]:
+        """
+        Main workflow: poll for link, extract content (PDF or HTML), and send to LLM for processing.
+        """
+        async with async_playwright() as p:
+            page, browser = await self.launch_browser_and_open_page(p)
+            link = await self._scrape_ir_page_for_link(page)
+            content = await self.extract_earnings_content(link, p, browser)
+
+        metrics = await self.extract_financial_metrics(content)
+        message = self.analyze_financial_metrics(metrics)
+        self.punt_message_to_discord(message)
+        self.store_artifacts(
+            scraped_url=link,
+            scraped_content=content,
+            groq_response=metrics,
+            discord_message=message
+        )
+        self.store_message_to_dynamo(message)
