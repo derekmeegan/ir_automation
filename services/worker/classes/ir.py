@@ -20,7 +20,6 @@ class IRWorkflow:
             - selectors: List[str] for fallback scraping
             - verify_keywords: Dict[str, Any] for quarter/year verification (e.g., {"quarter": "Q3", "year": "24"})
             - extraction_method: 'pdf' or 'html'
-            - custom_pdf_edit: Optional[[[str], str]]
             - llm_instructions: Dict[str, Any] (e.g., system prompt, temperature)
         """
         self.base_url: str = config.get("base_url", "")
