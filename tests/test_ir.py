@@ -155,4 +155,4 @@ def test_pdf_url(pdf_url, instance):
 async def test_hpe_workflow(hpe_test_config):
     workflow = IRWorkflow(hpe_test_config)
     result = await workflow.process_earnings()
-    print(result)
+    assert workflow.message

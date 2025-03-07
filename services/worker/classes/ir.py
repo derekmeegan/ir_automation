@@ -44,6 +44,7 @@ class IRWorkflow:
         self.s3_artifact_bucket = config.get("s3_artifact_bucket")
         self.browser = config.get('browser_type', 'chromium').lower()
         self.messages_table = config.get('messages_table')
+        self.message = None
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -71,26 +72,27 @@ class IRWorkflow:
         """
         Write the discord message to a DynamoDB table specified by self.messages_table.
         """
-        timestamp: str = datetime.now(timezone.utc).isoformat()
-        message_id: str = str(uuid.uuid4())
+        if self.deployment_type != 'local':
+            timestamp: str = datetime.now(timezone.utc).isoformat()
+            message_id: str = str(uuid.uuid4())
 
-        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
-        table = dynamodb.Table(self.messages_table)
-        
-        try:
-            table.put_item(
-                Item={
-                    "message_id": message_id,
-                    "ticker": self.ticker,
-                    "quarter": self.quarter,
-                    "year": self.year,
-                    "timestamp": timestamp,
-                    "discord_message": message
-                }
-            )
-            print(f"Stored discord message with id {message_id} in table.")
-        except Exception as e:
-            print(f"Error storing discord message to DynamoDB: {e}")
+            dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+            table = dynamodb.Table(self.messages_table)
+            
+            try:
+                table.put_item(
+                    Item={
+                        "message_id": message_id,
+                        "ticker": self.ticker,
+                        "quarter": self.quarter,
+                        "year": self.year,
+                        "timestamp": timestamp,
+                        "discord_message": message
+                    }
+                )
+                print(f"Stored discord message with id {message_id} in table.")
+            except Exception as e:
+                print(f"Error storing discord message to DynamoDB: {e}")
 
     def get_base_url(self, url: str) -> str:
         parsed_url = urlparse(url)
@@ -280,14 +282,15 @@ class IRWorkflow:
         return ""
 
     def punt_message_to_discord(self, discord_message: str) -> None:
-        requests.post(
-            self.discord_webhook_url, 
-            json={
-                "content": discord_message,
-                "username": "EarningsEar"
-            }
-        )
-        print('message sent to discord')
+        if self.deployment_type != 'local':
+            requests.post(
+                self.discord_webhook_url, 
+                json={
+                    "content": discord_message,
+                    "username": "EarningsEar"
+                }
+            )
+            print('message sent to discord')
 
     async def extract_earnings_content(self, link: str, p, browser) -> str:
         content = None
@@ -380,7 +383,8 @@ class IRWorkflow:
             f"### Sentiment Insights\n"
             f"{sentiment_msgs}"
         )
-        return final_message[:2000]
+        self.message = final_message[:2000]
+        return self.message
 
     async def extract_financial_metrics(self, content: str) -> Dict[str, Any]:
         """
@@ -435,32 +439,31 @@ class IRWorkflow:
         groq_response: Dict[str, Any],
         discord_message: str
     ) -> None:
-        if self.deployment_type != 'local':
-            timestamp: str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            file_name: str = f"{self.ticker}_{timestamp}.json"
-            stored_config: Dict[str, Any] = self.original_config.copy()
-            if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
-                try:
-                    stored_config["llm_instructions"]["system"] = base64.b64decode(
-                        stored_config["llm_instructions"]["system"]
-                    ).decode("utf-8")
-                except Exception:
-                    pass
+        timestamp: str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        file_name: str = f"{self.ticker}_{timestamp}.json"
+        stored_config: Dict[str, Any] = self.original_config.copy()
+        if "llm_instructions" in stored_config and "system" in stored_config["llm_instructions"]:
+            try:
+                stored_config["llm_instructions"]["system"] = base64.b64decode(
+                    stored_config["llm_instructions"]["system"]
+                ).decode("utf-8")
+            except Exception:
+                pass
 
-            artifact: Dict[str, Any] = {
-                "ticker": self.ticker,
-                "timestamp": timestamp,
-                "scraped_url": scraped_url,
-                "scraped_content": scraped_content,
-                "groq_response": groq_response,
-                "discord_message": discord_message,
-                "config": stored_config
-            }
-            artifact_json: str = json.dumps(artifact)
-            s3_bucket = self.s3_artifact_bucket
-            s3_client = boto3.client("s3")
-            s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
-            print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")
+        artifact: Dict[str, Any] = {
+            "ticker": self.ticker,
+            "timestamp": timestamp,
+            "scraped_url": scraped_url,
+            "scraped_content": scraped_content,
+            "groq_response": groq_response,
+            "discord_message": discord_message,
+            "config": stored_config
+        }
+        artifact_json: str = json.dumps(artifact)
+        s3_bucket = self.s3_artifact_bucket
+        s3_client = boto3.client("s3")
+        s3_client.put_object(Bucket=s3_bucket, Key=file_name, Body=artifact_json)
+        print(f"Artifacts stored in S3 bucket '{s3_bucket}' with key '{file_name}'")
             
     async def process_earnings(self) -> Dict[str, Any]:
         """
@@ -474,10 +477,10 @@ class IRWorkflow:
         metrics = await self.extract_financial_metrics(content)
         message = self.analyze_financial_metrics(metrics)
         self.punt_message_to_discord(message)
-        self.store_artifacts(
-            scraped_url=link,
-            scraped_content=content,
-            groq_response=metrics,
-            discord_message=message
-        )
+        # self.store_artifacts(
+        #     scraped_url=link,
+        #     scraped_content=content,
+        #     groq_response=metrics,
+        #     discord_message=message
+        # )
         self.store_message_to_dynamo(message)

@@ -60,6 +60,13 @@ class MyServerlessStack(Stack):
             auto_delete_objects=True
         )
 
+        test_artifact_bucket: Bucket = Bucket(
+            self,
+            "TestArtifactBucket",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True
+        )
+
         scheduling_table = dynamodb.Table(
             self,
             "SchedulingTable",
