@@ -45,6 +45,7 @@ class IRWorkflow:
         self.browser = config.get('browser_type', 'chromium').lower()
         self.messages_table = config.get('messages_table')
         self.message = None
+        self.link = None
 
     def _get_discord_webhook_url(self):
         """Retrieve the Discord Webhook URL from AWS Secrets Manager."""
@@ -135,7 +136,6 @@ class IRWorkflow:
         attempt = 0
         domcontentloaded_timeout_count = 0
         waitforselector_timeout_count = 0
-        # async with async_playwright() as p:
         while True:
             if attempt == 8:
                 break
@@ -194,6 +194,9 @@ class IRWorkflow:
             print(f"Best candidate found with priority {best_priority}: {best_href}")
             if best_priority > 0:
                 print(f"Returning link: {best_href}")
+                if best_href.startswith('/'):
+                    best_href = self.get_base_url(self.base_url) + best_href
+                self.link = best_href
                 return best_href
             else:
                 print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
@@ -252,10 +255,6 @@ class IRWorkflow:
         return text
 
     async def extract_html_text(self, url: str, page) -> str:
-        if url.startswith('/'):
-            url = self.get_base_url(self.base_url) + url
-
-        # async with async_playwright() as p:
         domcontentloaded_timeout_count = 0
         pagerinnertext_timeout_count = 0
         for attempt in range(8):
@@ -341,39 +340,41 @@ class IRWorkflow:
 
         # Process full year metrics, if available
         full_year: Dict[str, Any] = metrics.get("full_year", {})
-        for key, actual in full_year.items():
-            hist_val: Optional[float] = hist.get(f"full_year_{key}")
-            comp: str = compare(actual, hist_val)
-            messages.append(
-                f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}"
-            )
+        if full_year:
+            for key, actual in full_year.items():
+                hist_val: Optional[float] = hist.get(f"full_year_{key}")
+                comp: str = compare(actual, hist_val)
+                messages.append(
+                    f"Full Year {key.replace('_billion', '').replace('_', ' ').title()}: ${actual}{'B' if 'billion' in key else ''} vs {hist_val}{'B' if 'billion' in key else ''} {comp}"
+                )
 
         # Process forward guidance metrics
         forward_guidance: Dict[str, Any] = metrics.get("forward_guidance", {})
-        forward_messages: List[str] = []
-        for period, guidance in forward_guidance.items():
-            period_msgs: List[str] = []
-            for key, value in guidance.items():
-                if isinstance(value, dict) and value.get('low') and value.get('high'):
-                    period_msgs.append(
-                        f"{key.replace('_', ' ').title()}: {value['low']:.2f}B - {value['high']:.2f}B"
-                    )
-                elif isinstance(value, list) and all(value):
-                    if len(value) == 1:
-                        value = [value[0], value[0]]
-                    period_msgs.append(
-                        f"{key.replace('_', ' ').title()}: {value[0]:.2f}B - {value[1]:.2f}B"
-                    )
-                else:
-                    period_msgs.append(f"{key.replace('_', ' ').title()}: {value}")
-            forward_messages.append(f"\n{period.replace('_', ' ').title()}:\n" + "\n".join(period_msgs))
+        if forward_guidance:
+            forward_messages: List[str] = []
+            for period, guidance in forward_guidance.items():
+                period_msgs: List[str] = []
+                for key, value in guidance.items():
+                    if isinstance(value, dict) and value.get('low') and value.get('high'):
+                        period_msgs.append(
+                            f"{key.replace('_', ' ').title()}: {value['low']:.2f}B - {value['high']:.2f}B"
+                        )
+                    elif isinstance(value, list) and all(value):
+                        if len(value) == 1:
+                            value = [value[0], value[0]]
+                        period_msgs.append(
+                            f"{key.replace('_', ' ').title()}: {value[0]:.2f}B - {value[1]:.2f}B"
+                        )
+                    else:
+                        period_msgs.append(f"{key.replace('_', ' ').title()}: {value}")
+                forward_messages.append(f"\n{period.replace('_', ' ').title()}:\n" + "\n".join(period_msgs))
 
-        sentiment_snippets: List[Dict[str, str]] = extracted_data.get("sentiment_snippets", [])
-        classification_map: Dict[str, str] = {'bullish': "🟢", 'bearish': "🔴", 'neutral': "🟡"}
-        sentiment_msgs: str = "\n".join(
-            [f"- {s.get('snippet', '')} {classification_map.get(s.get('classification', '').lower(), '🟡')}"
-            for s in sentiment_snippets]
-        )
+            sentiment_snippets: List[Dict[str, str]] = extracted_data.get("sentiment_snippets", [])
+            classification_map: Dict[str, str] = {'bullish': "🟢", 'bearish': "🔴", 'neutral': "🟡"}
+            sentiment_msgs: str = "\n".join(
+                [f"- {s.get('snippet', '')} {classification_map.get(s.get('classification', '').lower(), '🟡')}"
+                for s in sentiment_snippets]
+            )
 
         final_message: str = (
             f"### ${self.ticker.upper()} Q{self.quarter} Earnings Analysis\n"

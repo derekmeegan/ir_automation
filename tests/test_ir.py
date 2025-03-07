@@ -168,13 +168,140 @@ def nvda_test_config(default_config):
         ],
         "verify_keywords": {
             "fixed_terms": [
-                "reports",
+                "announces",
                 "results"
             ],
             "quarter_as_string": True,
             "requires_quarter": True,
             "requires_year": True
         },
+        'page_content_selector': 'body'
+    }
+
+@pytest.fixture
+def ai_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 3,
+        "year": 2025,
+        "browser_type": "firefox",
+        'ticker': 'AI',
+        'base_url': 'https://ir.c3.ai/news',
+        "selector": "a",
+        "url_ignore_list": [
+            'https://ir.c3.ai/news-releases/news-release-details/c3-ai-announces-fiscal-second-quarter-2025-financial-results',
+            'https://ir.c3.ai/news-releases/news-release-details/c3-ai-announces-fiscal-first-quarter-2025-financial-results',
+        ],
+        "verify_keywords": {
+            "fixed_terms": [
+                "fiscal",
+                "announces"
+            ],
+            "quarter_as_string": True,
+            "requires_quarter": True,
+            "requires_year": True
+        },
+        'page_content_selector': 'body'
+    }
+
+@pytest.fixture
+def lz_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 4,
+        "year": 2025,
+        "browser_type": "firefox",
+        'ticker': 'LZ',
+        'base_url': 'https://investors.legalzoom.com/news-events/press-releases',
+        "selector": "a",
+        "url_ignore_list": [],
+        "verify_keywords": {
+            "fixed_terms": [
+                "news-release-details",
+                "financial"
+            ],
+            "quarter_as_string": True,
+            "requires_quarter": True,
+            "requires_year": True
+        },
+        'page_content_selector': 'body'
+    }
+
+@pytest.fixture
+def mrvl_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 4,
+        "year": 2025,
+        "browser_type": "chromium",
+        'ticker': 'MRVL',
+        'base_url': 'https://investor.marvell.com/news-releases',
+        "selector": "a",
+        "url_ignore_list": [
+            'https://investor.marvell.com/2024-12-03-Marvell-Technology,-Inc-Reports-Third-Quarter-of-Fiscal-Year-2025-Financial-Results'
+        ],
+        "verify_keywords": {
+            "fixed_terms": [
+                "reports",
+                "financial",
+                "results"
+            ],
+            "quarter_as_string": True,
+            "requires_quarter": True,
+            "requires_year": True
+        },
+        'href_ignore_words': [
+            'Fiscal-Year-2024',
+            'Fiscal-Year-2023',
+            'Fiscal-Year-2022',
+            'Fiscal-Year-2021'
+            'Fiscal-Year-2020',
+            'Fiscal-Year-2019',
+            'Conference-Call'
+        ],
+        'page_content_selector': 'body'
+    }
+
+@pytest.fixture
+def crm_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 4,
+        "year": 2025,
+        "browser_type": "chromium",
+        'ticker': 'CRM',
+        "extraction_method": 'pdf',
+        'base_url': 'https://investor.salesforce.com/financials/default.aspx',
+        "selector": "a.doc-link",
+        "url_ignore_list": [
+            'https://s23.q4cdn.com/574569502/files/doc_financials/2025/q3/CRM-Q3-FY25-Earnings-Press-Release-w-financials.pdf',
+            'https://s23.q4cdn.com/574569502/files/doc_financials/2025/q2/CRM-Q2-FY25-Earnings-Press-Release-w-financials.pdf',
+            'https://s23.q4cdn.com/574569502/files/doc_financials/2025/q1/CRM-Q1-FY25-Earnings-Press-Release-w-financials.pdf'
+        ],
+        "verify_keywords": {
+            "fixed_terms": [
+                "reports",
+                "financial",
+                "results"
+            ],
+            "quarter_with_q": True,
+            "requires_quarter": True,
+            "requires_year": True
+        },
+        'href_ignore_words': [
+            'FY24',
+            'FY23',
+            'FY22',
+            'FY21',
+            'FY20',
+            'FY19',
+            'FY18',
+            'FY17',
+            'FY16',
+            'FY15',
+            'FY14',
+            'FY13',
+        ],
         'page_content_selector': 'body'
     }
 
@@ -186,11 +313,41 @@ def test_pdf_url(pdf_url, instance):
 @pytest.mark.asyncio
 async def test_hpe_workflow(hpe_test_config):
     workflow = IRWorkflow(hpe_test_config)
-    result = await workflow.process_earnings()
+    await workflow.process_earnings()
+    assert workflow.link == 'https://www.hpe.com/us/en/newsroom/press-release/2025/03/hewlett-packard-enterprise-reports-fiscal-2025-first-quarter-results.html'
     assert workflow.message
 
 @pytest.mark.asyncio
 async def test_nvda_workflow(nvda_test_config):
     workflow = IRWorkflow(nvda_test_config)
-    result = await workflow.process_earnings()
+    await workflow.process_earnings()
+    assert workflow.link == 'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-fourth-quarter-and-fiscal-2025'
+    assert workflow.message
+
+@pytest.mark.asyncio
+async def test_ai_workflow(ai_test_config):
+    workflow = IRWorkflow(ai_test_config)
+    await workflow.process_earnings()
+    assert workflow.link == 'https://ir.c3.ai/news-releases/news-release-details/c3-ai-announces-fiscal-third-quarter-2025-financial-results'
+    assert workflow.message
+
+@pytest.mark.asyncio
+async def test_lz_workflow(lz_test_config):
+    workflow = IRWorkflow(lz_test_config)
+    await workflow.process_earnings()
+    assert workflow.link == 'https://investors.legalzoom.com/news-releases/news-release-details/legalzoom-reports-fourth-quarter-and-full-year-2024-financial'
+    assert workflow.message
+
+@pytest.mark.asyncio
+async def test_mrvl_workflow(mrvl_test_config):
+    workflow = IRWorkflow(mrvl_test_config)
+    await workflow.process_earnings()
+    assert workflow.link == 'https://investor.marvell.com/2025-03-05-Marvell-Technology,-Inc-Reports-Fourth-Quarter-and-Fiscal-Year-2025-Financial-Results'
+    assert workflow.message
+
+@pytest.mark.asyncio
+async def test_crm_workflow(crm_test_config):
+    workflow = IRWorkflow(crm_test_config)
+    await workflow.process_earnings()
+    assert workflow.link == 'https://s23.q4cdn.com/574569502/files/doc_financials/2025/q4/CRM-Q4-FY25-Earnings-Press-Release-w-financials.pdf'
     assert workflow.message
