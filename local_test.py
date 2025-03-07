@@ -12,7 +12,7 @@ from serverless.worker.handler import process
 if __name__ == "__main__":
     # Set up environment variables for local testing.
 
-    os.environ["QUARTER"] = '4'
+    os.environ["QUARTER"] = '3'
     os.environ["YEAR"] = '2024'
     os.environ["JSON_DATA"] = '{"current_revenue_billion": 161.71, "current_transaction_revenue_billion": 52.96, "current_subscription_revenue_billion": 108.75, "current_gross_profit_billion": 108.32, "current_net_income_billion": 12.85, "current_adj_ebitda_billion": 44.2, "current_non_gaap_net_income_billion": 32.6, "current_free_cash_flow_billion": 35.88, "full_year_revenue_billion": 681.88, "full_year_transaction_revenue_billion": 245.69, "full_year_subscription_revenue_billion": 436.19, "full_year_gross_profit_billion": 441.79, "full_year_net_income_billion": 29.96, "full_year_adj_ebitda_billion": 148.11, "full_year_non_gaap_net_income_billion": 99.45, "full_year_free_cash_flow_billion": 99.94, "next_quarter_sales_estimate_billion": 175.0, "fiscal_year_sales_estimate_billion": 179.0}'
     os.environ["DEPLOYMENT_TYPE"] = 'local'
@@ -289,7 +289,7 @@ if __name__ == "__main__":
     os.environ["SITE_CONFIG"] = json.dumps({
         "ticker": "HPE",
         "browser_type": "firefox",
-        "base_url": "https://www.hpe.com/us/en/newsroom/press-hub.html/page2",
+        "base_url": "https://www.hpe.com/us/en/newsroom/press-hub.html",
         "key_phrase": "",
         "llm_instructions": {
         "system": """
@@ -308,7 +308,8 @@ if __name__ == "__main__":
         You will receive a body of text containing a company's financial report and historical financial metrics. Your task is to:
 
         1. **Extract Financial Metrics:**
-        - Identify and extract every financial metric mentioned in the report according to the mapping above.
+        - If a metric is not mentioned in the document, it should be null. DO NOT MAKE UP METRICS IF THEY ARE NOT THERE.
+        - Identify and extract every financial metric mentioned in the body of text using the example naming convention above, even if they are not listed above or the ones above are not present in the document.
         - Explicitly differentiate between **current quarter metrics** and **full year metrics** if both are present. For each metric, capture its value under either "current_quarter" or "full_year" in the output.
         - Additionally, extract any forward guidance metrics and differentiate them into:
                 - **Next Quarter Forward Guidance**
@@ -382,22 +383,21 @@ if __name__ == "__main__":
         "max_attempts": 30
         },
         "refine_link_list": True,
-        "selectors": [
-        "a.uc-card-wrapper"
-        ],
+        "selectors": "a.uc-card-wrapper",
         # "extraction_method": 'pdf',
         "url_ignore_list": [
+           
         ],
         "verify_keywords": {
         "fixed_terms": [
-           "results",
-           "reports"
+           "reports",
+           "results"
         ],
         "quarter_as_string": True,
         "requires_quarter": True,
         "requires_year": True
         },
-        # "href_ignore_words": ['Fiscal-Year-2023', 'Fiscal-Year-2022', 'Fiscal-Year-2021', 'Fiscal-Year-2020', 'Fiscal-Year-2019', 'Fiscal-Year-2018', 'Fiscal-Year-2017', 'Fiscal-Year-2016', 'Fiscal-Year-2015', 'Fiscal-Year-2014', 'Fiscal-Year-2013', 'Fiscal-Year-2012', 'Fiscal-Year-2011', 'Fiscal-Year-2010'],
+        "href_ignore_words": ['Fiscal-Year-2023', 'Fiscal-Year-2022', 'Fiscal-Year-2021', 'Fiscal-Year-2020', 'Fiscal-Year-2019', 'Fiscal-Year-2018', 'Fiscal-Year-2017', 'Fiscal-Year-2016', 'Fiscal-Year-2015', 'Fiscal-Year-2014', 'Fiscal-Year-2013', 'Fiscal-Year-2012', 'Fiscal-Year-2011', 'Fiscal-Year-2010'],
         'page_content_selector': 'body'
     })
 

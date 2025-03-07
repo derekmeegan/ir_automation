@@ -10,7 +10,7 @@ from groq import Groq, BadRequestError
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 class IRWorkflow:
     def __init__(self, config: Dict[str, Any]):
@@ -27,8 +27,8 @@ class IRWorkflow:
         """
         self.base_url: str = config.get("base_url", "")
         self.link_template: Optional[str] = config.get("link_template")
-        self.selectors: list[str] = config.get("selectors", ["a.module_link"])
-        self.key_phrase: str = config.get("key_phrase", "Shareholder Letter")
+        self.selector: list[str] = config.get('selector', 'a')
+        self.key_phrase: str = config.get("key_phrase", "")
         self.verify_keywords = config.get("verify_keywords", {})
         self.url_keywords = config.get("url_keywords", {})
         self.extraction_method: str = config.get("extraction_method", None)
@@ -106,20 +106,38 @@ class IRWorkflow:
         parsed_url = urlparse(url)
         return f"{parsed_url.scheme}://{parsed_url.netloc}"
 
-    def switch_browser(self):
-        if self.browser == 'chromium' and not self.past_browser:
-            self.browser = 'firefox'
-        elif self.browser == 'firefox' and not self.past_browser:
-            self.browser = 'chromium'
+    async def launch_browser_and_open_page(self, p):
+        print(f'Launching browser: {self.browser}')
 
-        print('already switched browser and still doesnt work... ur cooked')
-        return
-
-    def get_browser(self, p):
+        browser = p.chromium    
         if self.browser == 'firefox':
-            return p.firefox
+            browser = p.firefox
+
+        browser = await browser.launch(
+            headless=True,
+            args=[
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-software-rasterizer",
+                "--headless=new"
+            ]
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/121.0.0.0 Safari/537.36",
+            ignore_https_errors=True,
+            locale='en-US',
+            bypass_csp=True,
+            java_script_enabled=True
+        )
+        
+        page = await context.new_page()
+        await page.route("**/*", lambda route: route.abort()
+            if route.request.resource_type in ["image", "stylesheet", "font"]
+            else route.continue_())
             
-        return p.chromium
+        return page, browser
         
     async def _build_link_from_template(self) -> Optional[str]:
         """
@@ -163,145 +181,114 @@ class IRWorkflow:
         return None
 
     async def _scrape_ir_page_for_link(self) -> Optional[str]:
-        """
-        Scrapes the IR page up to 5 iterations to find a link matching:
-          - a required key phrase (e.g., "Shareholder Letter") in the element text
-          - additional indicators (quarter and year) in the link URL (href), with preference:
-            both > quarter only > year only.
-        On the final iteration, returns the best candidate found (even with lower priority).
-        """
         attempt = 0
-        while True:
-            print(f"Iteration {attempt+1} of 8")
-            candidate_elements = []
-            async with async_playwright() as p:
-                print('launching browser')
-                browser = self.get_browser(p)
-                if attempt > 1:
-                    print(f'{self.browser} aint working, switching to a different one')
-                    self.switch_browser()
-                    browser = self.get_browser(p)
+        domcontentloaded_timeout_count = 0
+        waitforselector_timeout_count = 0
+        async with async_playwright() as p:
+            while True:
+                if attempt == 8:
+                    await browser.close()
+                    break
+                print(f"Iteration {attempt+1} of 8")
+                
+                page, browser = await self.launch_browser_and_open_page(p)
 
-                browser = await browser.launch(
-                    headless=True,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-gpu",
-                        "--single-process",
-                        "--disable-dev-shm-usage",
-                        "--disable-software-rasterizer",
-                        "--disable-setuid-sandbox",
-                        "--disable-features=SitePerProcess",
-                        "--headless=new"
-                    ]
-                )
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                               "AppleWebKit/537.36 (KHTML, like Gecko) "
-                               "Chrome/121.0.0.0 Safari/537.36",
-                    ignore_https_errors=True
-                )
-                page = await context.new_page()
                 try:
-                    await page.goto(self.base_url, wait_until="networkidle", timeout=5000)
+                    timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
+                    await page.goto(self.base_url, wait_until="domcontentloaded", timeout=timeout)
+                except PlaywrightTimeoutError as e:
+                    print('timeout reached, attempting to pull content thats there')
+                    domcontentloaded_timeout_count += 1
                 except Exception as e:
                     print(f"Error during page.goto (networkidle): {e}")
-                    try:
-                        await page.goto(self.base_url, wait_until="domcontentloaded", timeout=5000)
-                    except Exception as inner_e:
-                        print(f"Fallback navigation failed: {inner_e}")
-                    print('timeout reached, attempting to pull content thats there')
-                    pass
 
                 try:
-                    await page.wait_for_selector(self.selectors[0], timeout=5000)
+                    timeout = 5_000 if waitforselector_timeout_count < 3 else 10_000
+                    await page.wait_for_selector(self.selector, timeout=timeout)
+                except PlaywrightTimeoutError as e:
+                    print(f"Timeout waiting for selector '{self.selector}': {e}")
+                    waitforselector_timeout_count += 1
                 except Exception as e:
-                    print(f"Error waiting for selector '{self.selectors[0]}': {e}")
+                    print(f"Error waiting for selector '{self.selector}': {e}")
+                    attempt+=1
 
                 print('Extracted page content')
-                for selector in self.selectors:
-                    elements = []
-                    try:
-                        elements = await page.query_selector_all(selector)
-                    except Exception as e:
-                        print('error reading selectors from page')
-                    print(f"Found {len(elements)} elements with selector '{selector}'")
-                    for el in elements:
-                        text: str = (await el.inner_text()).strip()
-                        print(text)
-                        if self.key_phrase.lower() in text.lower():
-                            candidate_elements.append((el, text))
+                elements = []
+                try:
+                    elements = await page.query_selector_all(self.selector)
+                    print(f"Found {len(elements)} elements with selector '{self.selector}'")
+                except Exception as e:
+                    print('error reading selectors from page')
+
+                if not elements:
+                    print(f"No elements found in in iteration {attempt+1}. Decrementing 1 from the attempt.")
+                    attempt -=1
+                    continue
                 
-                # If we want to refine the candidate list (or if no candidates found), check href values
-                if self.refine_link_list or not candidate_elements:
-                    if candidate_elements:
-                        print('Refining candidate elements')
-                        candidates = []
-                        search_terms = []
-                        keywords = self.verify_keywords
-                        if keywords.get('requires_year', False):
-                            year = self.year
-                            if keywords.get('year_as_two_digits', False):
-                                year = str(year)[-2:]
+                print('Refining element list')
+                keywords = self._generate_search_keywords()
+                candidates = []
+                for el in elements:
+                    href = await el.get_attribute("href")
+                    if not href or href in self.url_ignore_list:
+                        continue
+                    if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
+                        continue
+                    if any(ignore_word.lower() in href.lower() for ignore_word in self.href_ignore_words):
+                        continue
+                    
+                    href_lower = href.lower()
+                    match_count: int = sum(1 for kw in keywords if kw in href_lower)
+                    candidates.append((match_count, el, href))
 
-                            search_terms.append(year)
-
-                        if keywords.get('requires_quarter', False):
-                            quarter = self.quarter
-                            if keywords.get('quarter_as_string', False):
-                                quarter = {
-                                    1: 'first',
-                                    2: 'second',
-                                    3: 'third',
-                                    4: 'fourth'
-                                }.get(int(float(quarter)))
-                            elif keywords.get('quarter_with_q', False):
-                                quarter = f'Q{quarter}'
-
-                            search_terms.append(quarter)
-
-                        if fixed_terms:= keywords.get('fixed_terms', []):
-                            search_terms.extend(fixed_terms)
-                            
-                        keywords = [str(kw).lower() for kw in search_terms if kw]
-                        
-                        for el, _ in candidate_elements:
-                            href = await el.get_attribute("href")
-                            if not href or href in self.url_ignore_list:
-                                continue
-                            if self.extraction_method == 'pdf' and not href.endswith(self.extraction_method):
-                                continue
-                            if any(ignore_word.lower() in href.lower() for ignore_word in self.href_ignore_words):
-                                continue
-                            
-                            href_lower = href.lower()
-                            match_count: int = sum(1 for kw in keywords if kw in href_lower)
-                            candidates.append((match_count, el, href))
-
-                        candidates.sort(key=lambda x: x[0], reverse=True)
-                        best_priority, best_el, best_href = candidates[0]
-                        print(f"Best candidate found with priority {best_priority}: {best_href}")
-                        if best_priority > 0:
-                            print(f"Returning link: {best_href}")
-                            await browser.close()
-                            return best_href
-                        else:
-                            print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
-                            attempt -=1
-                    else:
-                        print(f"No candidate elements found in in iteration {attempt+1}. Decrementing 1 from the attempt.")
-                        attempt -=1
-                else:
-                    # If not refining, simply return the href of the first candidate
-                    link = await candidate_elements[0][0].get_attribute("href")
-                    print("Returning first found link without refining:")
+                candidates.sort(key=lambda x: x[0], reverse=True)
+                best_priority, best_el, best_href = candidates[0]
+                print(f"Best candidate found with priority {best_priority}: {best_href}")
+                if best_priority > 0:
+                    print(f"Returning link: {best_href}")
                     await browser.close()
-                    return link
-                await browser.close()
+                    return best_href
+                else:
+                    print(f"No candidate with sufficient priority found in iteration {attempt+1}. Decrementing 1 from the attempt")
+                    attempt -=1
             
             attempt +=1
-            await asyncio.sleep(5)
-        raise Exception("Earnings link not found after 5 iterations.")
+            await asyncio.sleep(3)
+        raise Exception(f"Earnings link not found after {attempt+1} iterations.")
+
+    def _generate_search_keywords(self) -> List[str]:
+        """
+        Generate a list of search keywords based on verification criteria.
+        
+        Returns:
+            List of lowercase keywords to search for in URLs
+        """
+        search_terms = []
+        keywords = self.verify_keywords
+        
+        if keywords.get('requires_year', False):
+            year = self.year
+            if keywords.get('year_as_two_digits', False):
+                year = str(year)[-2:]
+            search_terms.append(year)
+
+        if keywords.get('requires_quarter', False):
+            quarter = self.quarter
+            if keywords.get('quarter_as_string', False):
+                quarter = {
+                    1: 'first',
+                    2: 'second',
+                    3: 'third',
+                    4: 'fourth'
+                }.get(int(float(quarter)))
+            elif keywords.get('quarter_with_q', False):
+                quarter = f'Q{quarter}'
+            search_terms.append(quarter)
+
+        if fixed_terms := keywords.get('fixed_terms', []):
+            search_terms.extend(fixed_terms)
+            
+        return [str(kw).lower() for kw in search_terms if kw]
 
     async def get_earnings_link(self) -> Optional[str]:
         """
@@ -333,54 +320,35 @@ class IRWorkflow:
     async def extract_html_text(self, url: str) -> str:
         if url.startswith('/'):
             url = self.get_base_url(self.base_url) + url
-        for attempt in range(8):
-            print(f"Iteration {attempt+1} of 8")
-            async with async_playwright() as p:
-                browser_type = self.get_browser(p)
-                if attempt > 1:
-                    print(f"{self.browser} not working... switching to a different one")
-                    self.switch_browser()
-                    browser_type = self.get_browser(p)
 
-                browser = await browser_type.launch(
-                    headless=True,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-gpu",
-                        "--single-process",
-                        "--disable-dev-shm-usage",
-                        "--disable-software-rasterizer",
-                        "--disable-setuid-sandbox",
-                        "--disable-features=SitePerProcess",
-                        "--headless=new"
-                    ]
-                )
-                context = await browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                            "AppleWebKit/537.36 (KHTML, like Gecko) "
-                            "Chrome/115.0.0.0 Safari/537.36",
-                    ignore_https_errors=True
-                )
-                page = await context.new_page()
+        async with async_playwright() as p:
+            domcontentloaded_timeout_count = 0
+            pagerinnertext_timeout_count = 0
+            for attempt in range(8):
+                print(f"Iteration {attempt+1} of 8")
+                page, browser = await self.launch_browser_and_open_page(p)
                 try:
-                    await page.goto(url, wait_until="networkidle", timeout=20000)
+                    timeout = 5_000 if domcontentloaded_timeout_count < 3 else 10_000
+                    await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
                 except Exception as e:
-                    print(f"Error during page.goto (networkidle): {e}")
-                    try:
-                        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    except Exception as inner_e:
-                        print(f"Fallback navigation failed: {inner_e}")
-                    print("timeout reached, attempting to pull content that's there")
+                    print(
+                        f"Error during page.goto (domcontentloaded): {e}"
+                        "timeout reached, attempting to pull content that's there"
+                    )
+                    domcontentloaded_timeout_count += 1
                 try:
-                    content: str = await page.inner_text(self.page_content_selector, timeout=10000)
+                    timeout = 10_000 if pagerinnertext_timeout_count < 3 else 20_000
+                    content: str = await page.inner_text(self.page_content_selector, timeout=timeout)
                     await browser.close()
                     if content or attempt > 6:
                         return content
+                except PlaywrightTimeoutError as e:
+                    print(f"Timeout waiting for content")
+                    pagerinnertext_timeout_count += 1
                 except Exception as e:
                     print(f"Error extracting content: {e}")
                     await browser.close()
         return ""
-
 
     async def poll_for_earnings_link(self) -> str:
         """
@@ -427,6 +395,7 @@ class IRWorkflow:
         if not content:
             raise Exception('Content was not able to be scraped')
         metrics = await self.extract_financial_metrics(content)
+        print(metrics)
         message = self.analyze_financial_metrics(metrics)
         print('punting discord message')
         self.punt_message_to_discord(message)
@@ -485,11 +454,11 @@ class IRWorkflow:
         for period, guidance in forward_guidance.items():
             period_msgs: List[str] = []
             for key, value in guidance.items():
-                if isinstance(value, dict) and "low" in value and "high" in value:
+                if isinstance(value, dict) and value.get('low') and value.get('high'):
                     period_msgs.append(
                         f"{key.replace('_', ' ').title()}: {value['low']:.2f}B - {value['high']:.2f}B"
                     )
-                elif isinstance(value, list):
+                elif isinstance(value, list) and all(value):
                     if len(value) == 1:
                         value = [value[0], value[0]]
                     period_msgs.append(
@@ -539,7 +508,7 @@ class IRWorkflow:
                             "role": "system",
                             "content": f'''
                             Follow the below steps unless the provided information is empty or does not contain the earnings press release for {self.ticker} for {self.quarter} {self.year}
-                            DO NOT MAKE UP METRICS, ONLY USE NUMBERS PROVIDED IN THE TEXT
+                            DO NOT MAKE UP METRICS, ONLY USE NUMBERS PROVIDED IN THE CONTENT OF THE NEXT MESSAGE
                             {prompt}
                             '''
                         },
