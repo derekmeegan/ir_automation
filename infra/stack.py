@@ -53,19 +53,6 @@ class MyServerlessStack(Stack):
             "IRWorkflow/DiscordWebhookAPI"
         )
 
-        worker_lambda_execution_role = iam.Role(
-            self,
-            "WorkerLambdaExecutionRole",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
-        )
-
-        worker_lambda_execution_role.add_managed_policy(
-            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
-        )
-
-        groq_api_secret.grant_read(worker_lambda_execution_role)
-        discord_webhook_url.grant_read(worker_lambda_execution_role)
-
         artifact_bucket: Bucket = Bucket(
             self,
             "ArtifactBucket",
@@ -108,7 +95,7 @@ class MyServerlessStack(Stack):
         worker_image_asset = ecr_assets.DockerImageAsset(
             self,
             "WorkerImageAsset",
-            directory="../serverless/worker",
+            directory="../services/worker",
         )
 
         ec2_instance_role = iam.Role(
@@ -149,7 +136,6 @@ class MyServerlessStack(Stack):
             environment={
                 "TABLE_NAME": scheduling_table.table_name,
                 "WORKER_IMAGE_URI": worker_image_asset.image_uri,
-                "WORKER_EXECUTION_ROLE": worker_lambda_execution_role.role_arn,
                 "HISTORICAL_TABLE": historical_table.table_name,
                 "CONFIG_TABLE": config_table.table_name,
                 "MESSAGES_TABLE": messages_table.table_name,
@@ -167,19 +153,6 @@ class MyServerlessStack(Stack):
         scheduling_table.grant_read_data(manager_function)
         historical_table.grant_read_data(manager_function)
         config_table.grant_read_data(manager_function)
-
-        # Grant manager function permission to create/update worker Lambdas
-        manager_function.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "lambda:CreateFunction",
-                    "lambda:UpdateFunctionConfiguration",
-                    "lambda:UpdateFunctionCode",
-                    "lambda:GetFunction",
-                ],
-                resources=["*"],
-            )
-        )
 
         manager_function.role.add_to_principal_policy(
             iam.PolicyStatement(
@@ -212,13 +185,6 @@ class MyServerlessStack(Stack):
         manager_function.role.add_to_principal_policy(
             iam.PolicyStatement(
                 actions=["iam:PassRole"],
-                resources=[worker_lambda_execution_role.role_arn],
-            )
-        )
-
-        manager_function.role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["iam:PassRole"],
                 resources=[f"arn:aws:iam::{self.account}:role/EventBridgeInvokeLambdaRole"],
             )
         )
@@ -241,7 +207,7 @@ class MyServerlessStack(Stack):
             self,
             "BeforeMarketStartRule",
             schedule=events.Schedule.cron(
-                minute="50",
+                minute="55",
                 hour="10",
                 month="*",
                 week_day="MON-FRI",
@@ -256,7 +222,7 @@ class MyServerlessStack(Stack):
             self,
             "AfterMarketStartRule",
             schedule=events.Schedule.cron(
-                minute="50",
+                minute="55",
                 hour="20",
                 month="*",
                 week_day="MON-FRI",
@@ -274,7 +240,6 @@ class MyServerlessStack(Stack):
             entry="../serverless/scheduler",
             index="scheduler.py",
             handler="lambda_handler",
-            # layers=[pandas_layer],
             timeout=Duration.minutes(3),
             environment={ "TABLE_NAME": scheduling_table.table_name }
         )

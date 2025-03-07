@@ -11,7 +11,6 @@ from boto3.dynamodb.conditions import Key, Attr
 
 DYNAMO_TABLE = os.environ["TABLE_NAME"]
 WORKER_IMAGE_URI = os.environ["WORKER_IMAGE_URI"]
-WORKER_EXECUTION_ROLE = os.environ["WORKER_EXECUTION_ROLE"]
 HISTORICAL_TABLE = os.environ["HISTORICAL_TABLE"]
 CONFIG_TABLE = os.environ["CONFIG_TABLE"]
 MESSAGES_TABLE = os.environ["MESSAGES_TABLE"]
@@ -55,7 +54,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         json_data = generate_json_for_ticker(ticker, today_str)
         site_config = get_site_config(ticker)
-        
+
         if json_data is not None and site_config is not None:
             variables = {
                 "QUARTER": str(int(float(quarter))),
