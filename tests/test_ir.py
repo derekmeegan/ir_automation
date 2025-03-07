@@ -114,30 +114,62 @@ def default_prompt():
         **Output Requirement:**
         - The entire output must be valid JSON. Output the JSON in a code block (using triple backticks) to ensure proper formatting.
         """
-
 @pytest.fixture
-def hpe_test_config(default_prompt):
+def default_config(default_prompt):
     return {
         "discord_webhook_url": os.environ.get("DISCORD_WEBHOOK_URL", ""),
         "groq_api_key": os.environ.get("GROQ_API_KEY", ""),
-        "messages_table": os.environ.get('MESSAGES_TABLE', ''),
-        'quarter': 1,
-        "year": 2025,
-        "browser_type": "firefox",
-        "json_data": '{"current_revenue_billion": 161.71, "current_transaction_revenue_billion": 52.96, "current_subscription_revenue_billion": 108.75, "current_gross_profit_billion": 108.32, "current_net_income_billion": 12.85, "current_adj_ebitda_billion": 44.2, "current_non_gaap_net_income_billion": 32.6, "current_free_cash_flow_billion": 35.88, "full_year_revenue_billion": 681.88, "full_year_transaction_revenue_billion": 245.69, "full_year_subscription_revenue_billion": 436.19, "full_year_gross_profit_billion": 441.79, "full_year_net_income_billion": 29.96, "full_year_adj_ebitda_billion": 148.11, "full_year_non_gaap_net_income_billion": 99.45, "full_year_free_cash_flow_billion": 99.94, "next_quarter_sales_estimate_billion": 175.0, "fiscal_year_sales_estimate_billion": 179.0}',
-        'deployment_type': 'local',
-        'ticker': 'HPE',
-        'base_url': 'https://www.hpe.com/us/en/newsroom/press-hub.html',
+        "s3_artifact_bucket": os.environ.get('ARTIFACT_BUCKET', ''),
         'llm_instructions': {
             "system": default_prompt,
             "temperature": 0
         },
+        "json_data": '{"current_revenue_billion": 161.71, "current_transaction_revenue_billion": 52.96, "current_subscription_revenue_billion": 108.75, "current_gross_profit_billion": 108.32, "current_net_income_billion": 12.85, "current_adj_ebitda_billion": 44.2, "current_non_gaap_net_income_billion": 32.6, "current_free_cash_flow_billion": 35.88, "full_year_revenue_billion": 681.88, "full_year_transaction_revenue_billion": 245.69, "full_year_subscription_revenue_billion": 436.19, "full_year_gross_profit_billion": 441.79, "full_year_net_income_billion": 29.96, "full_year_adj_ebitda_billion": 148.11, "full_year_non_gaap_net_income_billion": 99.45, "full_year_free_cash_flow_billion": 99.94, "next_quarter_sales_estimate_billion": 175.0, "fiscal_year_sales_estimate_billion": 179.0}',
+        'deployment_type': 'local',
+    }
+
+@pytest.fixture
+def hpe_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 1,
+        "year": 2025,
+        "browser_type": "firefox",
+        'ticker': 'HPE',
+        'base_url': 'https://www.hpe.com/us/en/newsroom/press-hub.html',
         "selector": "a.uc-card-wrapper",
         "url_ignore_list": [],
         "verify_keywords": {
             "fixed_terms": [
-            "reports",
-            "results"
+                "reports",
+                "results"
+            ],
+            "quarter_as_string": True,
+            "requires_quarter": True,
+            "requires_year": True
+        },
+        'page_content_selector': 'body'
+    }
+
+@pytest.fixture
+def nvda_test_config(default_config):
+    return {
+        **default_config,
+        'quarter': 4,
+        "year": 2025,
+        "browser_type": "firefox",
+        'ticker': 'NVDIA',
+        'base_url': 'https://investor.nvidia.com/financial-info/financial-reports/',
+        "selector": "a.module-financial-table_link",
+        "url_ignore_list": [
+            'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-third-quarter-fiscal-2025',
+            'https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2025',
+            'https://investor.nvidia.com/news/press-release-details/2024/NVIDIA-Announces-Financial-Results-for-Fourth-Quarter-and-Fiscal-2024/'
+        ],
+        "verify_keywords": {
+            "fixed_terms": [
+                "reports",
+                "results"
             ],
             "quarter_as_string": True,
             "requires_quarter": True,
@@ -154,5 +186,11 @@ def test_pdf_url(pdf_url, instance):
 @pytest.mark.asyncio
 async def test_hpe_workflow(hpe_test_config):
     workflow = IRWorkflow(hpe_test_config)
+    result = await workflow.process_earnings()
+    assert workflow.message
+
+@pytest.mark.asyncio
+async def test_nvda_workflow(nvda_test_config):
+    workflow = IRWorkflow(nvda_test_config)
     result = await workflow.process_earnings()
     assert workflow.message

@@ -477,10 +477,10 @@ class IRWorkflow:
         metrics = await self.extract_financial_metrics(content)
         message = self.analyze_financial_metrics(metrics)
         self.punt_message_to_discord(message)
-        # self.store_artifacts(
-        #     scraped_url=link,
-        #     scraped_content=content,
-        #     groq_response=metrics,
-        #     discord_message=message
-        # )
+        self.store_artifacts(
+            scraped_url=link,
+            scraped_content=content,
+            groq_response=metrics,
+            discord_message=message
+        )
         self.store_message_to_dynamo(message)
