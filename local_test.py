@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "serverless", "worker"))
-from serverless.worker.handler import process
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "services", "worker"))
+from services.worker.handler import process
 
 if __name__ == "__main__":
     # Set up environment variables for local testing.
