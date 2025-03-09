@@ -174,4 +174,7 @@ cython_debug/
 *.ipynb
 *.json
 find_press_releases.py
-zz.py
+z*.py
+/output/*/*.txt
+/output/*/*/*.json
+/output/*/*.html

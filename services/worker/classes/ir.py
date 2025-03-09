@@ -253,7 +253,12 @@ class IRWorkflow:
             text += page_text + "\n"
         return text
 
-    async def extract_html_text(self, url: str, page) -> str:
+    async def extract_html_text(
+        self, 
+        url: str, 
+        page,
+        extract_html = False
+    ) -> str:
         domcontentloaded_timeout_count = 0
         pagerinnertext_timeout_count = 0
         for attempt in range(8):
@@ -269,7 +274,11 @@ class IRWorkflow:
                 domcontentloaded_timeout_count += 1
             try:
                 timeout = 10_000 if pagerinnertext_timeout_count < 3 else 20_000
-                content: str = await page.inner_text(self.page_content_selector, timeout=timeout)
+                if extract_html:
+                    content: str = await page.inner_html(self.page_content_selector, timeout=timeout)
+                else:
+                    content: str = await page.inner_text(self.page_content_selector, timeout=timeout)
+                
                 if content or attempt > 6:
                     return content
             except PlaywrightTimeoutError as e:
